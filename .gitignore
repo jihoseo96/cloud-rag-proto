@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.log
+
+# Virtual env
+.venv/
+venv/
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/launch.json   # launch.json은 남기고 싶으면 예외처리
+
+# Env / Secrets
+.env
+.env.*
+.envrc
+
+# Data / Artifacts (원하면 유지)
+# data/
+# *.pdf  # 샘플 PDF를 저장소에 넣지 않으려면 주석 해제

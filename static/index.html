@@ -1,0 +1,197 @@
+<!-- static/index.html -->
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>RAG Proto</title>
+  <style>
+    body {
+      font-family: ui-sans-serif, system-ui;
+      max-width: 900px;
+      margin: 24px auto;
+      padding: 0 12px
+    }
+
+    .card {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 12px 0;
+      background: #fff
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .btn {
+      padding: 8px 12px;
+      border: 1px solid #9ca3af;
+      border-radius: 8px;
+      background: #f5f5f5;
+      cursor: pointer
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed
+    }
+
+    .src {
+      font-size: 12px;
+      color: #6b7280
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      background: #f9fafb;
+      padding: 8px;
+      border-radius: 8px;
+      overflow: auto
+    }
+
+    .pill {
+      display: inline-block;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: #374151;
+      background: #f9fafb
+    }
+  </style>
+</head>
+
+<body>
+  <h1>팀 협업 RAG – 프로토타입</h1>
+
+  <div class="card">
+    <h3>문서 업로드</h3>
+    <div class="row">
+      <input id="title" placeholder="문서 제목" style="flex:1" />
+      <input id="file" type="file" accept="application/pdf" />
+      <button id="btnUpload" class="btn" onclick="upload()">업로드 & 인덱싱</button>
+      <span id="upStatus" class="pill" style="display:none">업로드 중…</span>
+    </div>
+    <div class="mono" id="upout"></div>
+  </div>
+
+  <div class="card">
+    <h3>질문</h3>
+    <div class="row" style="gap:12px">
+      <input id="q" placeholder="무엇이 궁금하신가요?" style="flex:1" />
+      <button id="btnAsk" class="btn" onclick="ask()">질의</button>
+      <label class="src"><input id="k" type="number" min="1" max="20" value="6" style="width:60px"> k</label>
+      <label class="src"><input id="wvec" type="number" step="0.1" min="0" max="1" value="0.7" style="width:70px">
+        w_vec</label>
+      <label class="src"><input id="wlex" type="number" step="0.1" min="0" max="1" value="0.3" style="width:70px">
+        w_lex</label>
+    </div>
+    <div id="askStatus" class="pill" style="display:none">질의 중…</div>
+    <div id="answer" class="card" style="display:none"></div>
+    <div id="cites"></div>
+    <div class="mono" id="debug" style="display:none"></div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function upload() {
+      const f = $('file').files[0];
+      const title = $('title').value || 'Untitled';
+      if (!f) { alert('PDF를 선택하세요'); return; }
+
+      $('btnUpload').disabled = true;
+      $('upStatus').style.display = 'inline-block';
+      $('upout').textContent = '';
+
+      try {
+        const fd = new FormData();
+        fd.append('title', title);
+        fd.append('file', f);
+
+        const r = await fetch('/documents/upload', { method: 'POST', body: fd });
+        const j = await r.json();
+        $('upout').textContent = JSON.stringify(j, null, 2);
+
+        if (!r.ok) {
+          alert('업로드 실패: ' + (j.detail || r.statusText));
+          return;
+        }
+      } catch (e) {
+        alert('업로드 중 오류: ' + e.message);
+      } finally {
+        $('btnUpload').disabled = false;
+        $('upStatus').style.display = 'none';
+      }
+    }
+
+    async function ask() {
+      const q = $('q').value.trim();
+      if (!q) { alert('질문을 입력하세요'); return; }
+
+      const k = Number($('k').value || 6);
+      const wvec = Number($('wvec').value || 0.7);
+      const wlex = Number($('wlex').value || 0.3);
+
+      $('btnAsk').disabled = true;
+      $('askStatus').style.display = 'inline-block';
+      $('answer').style.display = 'none';
+      $('cites').innerHTML = '';
+      $('debug').style.display = 'none';
+      $('debug').textContent = '';
+
+      try {
+        const url = new URL('/query', location.origin);
+        url.searchParams.set('q', q);
+        url.searchParams.set('k', k);
+        url.searchParams.set('w_vec', wvec);
+        url.searchParams.set('w_lex', wlex);
+
+        const r = await fetch(url.toString());
+        const j = await r.json();
+
+        if (!r.ok) {
+          alert('질의 실패: ' + (j.detail || r.statusText));
+          return;
+        }
+
+        const ans = $('answer');
+        ans.style.display = 'block';
+        ans.textContent = j.answer || '(빈 응답)';
+
+        const cites = $('cites');
+        cites.innerHTML = '';
+        (j.citations || []).forEach(c => {
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `
+        <div class="src">[${c.num}] ${c.title} (p.${c.page}) — <span style="color:#9ca3af">${c.document_id}</span></div>
+        <div>${escapeHtml(c.snippet || '')}</div>
+      `;
+          cites.appendChild(div);
+        });
+
+        if (j.debug) {
+          $('debug').style.display = 'block';
+          $('debug').textContent = JSON.stringify(j.debug, null, 2);
+        }
+      } catch (e) {
+        alert('질의 중 오류: ' + e.message);
+      } finally {
+        $('btnAsk').disabled = false;
+        $('askStatus').style.display = 'none';
+      }
+    }
+
+    function escapeHtml(s) {
+      return (s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+  </script>
+</body>
+
+</html>
