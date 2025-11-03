@@ -24,6 +24,7 @@ async def upload_pdf(
     file: UploadFile = File(...),        # ← 명시
     title: str = Form(...),
     db: Session = Depends(get_db),
+    group_id: str | None = Form(None),
 ):
     content = await file.read()
 
@@ -45,12 +46,19 @@ async def upload_pdf(
     doc_id, key = put_pdf(content, title)
     if isinstance(doc_id, str):
         doc_id = uuid.UUID(doc_id)
+        
+    gid = None
+    if group_id:
+        try:
+            gid = uuid.UUID(group_id)
+        except Exception:
+            raise HTTPException(status_code=422, detail="invalid group_id (must be UUID)")
 
-    db.add(Document(id=doc_id, workspace=WORKSPACE, s3_key_raw=key, title=title))
+    db.add(Document(id=doc_id, workspace=WORKSPACE, s3_key_raw=key, title=title,group_id=gid,))
     db.commit()
 
     # 인덱싱에 **원본 바이트 그대로 전달** → S3 왕복 제거
     index_document(db, doc_id, key, title, pdf_bytes=content)
 
     # FastAPI가 UUID를 자동 직렬화하지만, 확실히 하려면 str(...)로 반환
-    return {"status": "indexed", "document_id": str(doc_id), "s3_key": key}
+    return {"status": "indexed", "document_id": str(doc_id), "s3_key": key,"group_id": str(gid) if gid else None}

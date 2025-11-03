@@ -84,6 +84,8 @@ def query(
     diversity_penalty: float = Query(0.9, ge=0.5, le=1.0, description="동일 문서 다양성 페널티 계수"),
     per_doc_limit: int = Query(3, ge=1, le=10, description="문서당 최대 청크"),
     document_id: Optional[str] = None,
+    workspace: str = Query("personal"),
+    group_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     if not q.strip():
@@ -99,6 +101,14 @@ def query(
             doc_uuid = uuid.UUID(document_id)
         except ValueError:
             raise HTTPException(400, "document_id는 UUID 형식이어야 합니다.")
+        
+    gid = None
+    if group_id:
+        try:
+            gid = uuid.UUID(group_id)
+        except ValueError:
+            raise HTTPException(422, "group_id는 UUID 형식이어야 합니다.")
+        
 
     sql_base = """
     WITH vec(qv) AS (SELECT CAST(:qvec AS vector(1536))),
@@ -115,7 +125,10 @@ def query(
       FROM chunk c
       JOIN document d ON d.id = c.document_id
       WHERE 1=1
+         AND d.workspace = :workspace
     """
+    if gid is not None:
+        sql_base += "        AND d.group_id = :group_id\n"   # ★ 그룹 스코프 (옵션)
     if doc_uuid is not None:
         sql_base += "      AND c.document_id = :doc_id\n"  # ✅ 있을 때만 바인딩/조건 추가
 
@@ -149,17 +162,20 @@ def query(
         "q": q,
         "w_vec": w_vec,
         "w_lex": w_lex,
+        "workspace": workspace, 
         "lim_ext": k * 10,
         "div_penalty": diversity_penalty,
         "per_doc_limit": per_doc_limit,
         "lim": k,
     }
+    if gid is not None:
+        params["group_id"] = gid  
     if doc_uuid is not None:
         params["doc_id"] = doc_uuid  # ✅ 있을 때만 전달
 
     rows = db.execute(stmt, params).mappings().all()
     if not rows:
-        return {"answer": "검색 결과가 없습니다.", "citations": [], "debug": {"used_k": 0}}
+        return {"answer": "검색 결과가 없습니다.", "citations": [], "debug": {"used_k": 0,"workspace": workspace,"group_id": str(gid) if gid else None}}
 
     # 3) LLM 컨텍스트 구성 (인용 표기는 나중에 우리가 붙임)
     context = "\n\n".join(
@@ -171,6 +187,13 @@ def query(
         "If evidence is insufficient, say '근거 부족'. "
         "Do NOT add citation markers yourself; they will be attached later."
     )
+
+    if group_id:
+        from app.models.group import GroupInstruction
+        gi = db.get(GroupInstruction, gid) if 'gid' in locals() else None
+        if gi and gi.instruction:
+            sys = gi.instruction
+
     user = f"질문: {q}\n\n컨텍스트:\n{context}\n\n한국어로 간결히 답하세요."
 
     comp = client.chat.completions.create(
@@ -192,5 +215,7 @@ def query(
             "diversity_penalty": diversity_penalty,
             "per_doc_limit": per_doc_limit,
             "used_k": len(rows),
+             "workspace": workspace,                 # ★ 추적용
+            "group_id": str(gid) if gid else None  # ★ 추적용
         },
     }

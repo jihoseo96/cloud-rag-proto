@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 from sqlalchemy import text
 from app.db import engine
+from app.routes.groups import router as groups_router
 
 load_dotenv()
 # 환경변수
@@ -33,6 +34,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(health_router)
 app.include_router(doc_router)
 app.include_router(query_router)
+app.include_router(groups_router)
 
 @app.get("/health")
 def health_check():
