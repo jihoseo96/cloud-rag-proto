@@ -32,7 +32,7 @@ def _extract_pdf_pages_from_bytes(data: bytes) -> List[str]:
         return [(p.extract_text() or "").strip() for p in reader.pages]
     except PdfStreamError:
         # pdfminer.six 폴백
-        from pdfminer_high_level import extract_text  # type: ignore
+        from pdfminer.high_level import extract_text  # type: ignore
         txt = extract_text(BytesIO(data))
         return [t.strip() for t in txt.split("\f") if t.strip()]
 

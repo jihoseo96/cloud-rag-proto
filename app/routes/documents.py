@@ -3,13 +3,14 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, R
 from sqlalchemy.orm import Session
 from app.models.db import SessionLocal
 from app.models.document import Document
-from app.services.s3 import put_pdf  # TODO: 멀티포맷 반영해서 나중에 put_document로 이름 변경 고려
+from app.services.s3 import put_pdf
 from app.services.indexer import index_document
 import os, uuid, hashlib
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
+# DB Dependency
 def get_db():
     db = SessionLocal()
     try:
@@ -21,6 +22,9 @@ def get_db():
 WORKSPACE = os.getenv("WORKSPACE", "personal")
 
 
+# ---------------------------------------------------------
+# 1) 업로드 (멱등 처리 + SHA-256 기반 중복 체크)
+# ---------------------------------------------------------
 @router.post("/upload")
 async def upload_document(
     request: Request,
@@ -32,12 +36,14 @@ async def upload_document(
     """
     파일 업로드 엔드포인트.
     - PDF / DOCX / PPTX / TXT / MD 등 바이너리라면 무엇이든 수용
-    - S3에는 원본 바이트 그대로 저장
-    - 인덱싱 단계에서 extract_text_pages가 포맷을 자동 판별
+    - SHA-256 해시로 멱등 처리
+    - 기존 파일과 동일하면 S3/인덱싱 스킵
+    - extract_text_pages가 포맷 자동 판별
     """
+    # 파일 바이트 읽기
     content = await file.read()
 
-    # 너무 작은 파일 방어 로직 (포맷 제한 X)
+    # 너무 작은 파일 방어
     if len(content) < 8:
         dbg_path = f"/tmp/orig-{uuid.uuid4()}-{file.filename}"
         with open(dbg_path, "wb") as f:
@@ -46,8 +52,11 @@ async def upload_document(
             status_code=400,
             detail=f"File too small: size={len(content)}, saved={dbg_path}",
         )
+
+    # SHA-256 계산
     file_hash = hashlib.sha256(content).hexdigest()
 
+    # 이미 같은 파일이 업로드된 적이 있으면 재사용
     existing = (
         db.query(Document)
         .filter(
@@ -58,7 +67,6 @@ async def upload_document(
     )
 
     if existing:
-        # 🔁 멱등: 같은 파일이 이미 인덱싱되어 있음 → 재사용
         return {
             "status": "already_indexed",
             "document_id": str(existing.id),
@@ -72,14 +80,12 @@ async def upload_document(
         f"filename={file.filename!r}, ct={request.headers.get('content-type')}"
     )
 
-    # S3 업로드(원본 바이트 그대로)
-    # 현재 함수명이 put_pdf이지만, 실제로는 멀티포맷 바이너리를 저장하는 용도.
-    # TODO: 나중에 s3.py까지 포함해서 put_document(...) 등으로 네이밍 정리 가능.
+    # S3에 원본 바이트 업로드
     doc_id, key = put_pdf(content, title)
     if isinstance(doc_id, str):
         doc_id = uuid.UUID(doc_id)
 
-    # group_id 파싱 (optional)
+    # group_id 파싱
     gid = None
     if group_id:
         try:
@@ -87,7 +93,7 @@ async def upload_document(
         except Exception:
             raise HTTPException(status_code=422, detail="invalid group_id (must be UUID)")
 
-    # document 메타 저장
+    # 문서 메타데이터 저장
     db.add(
         Document(
             id=doc_id,
@@ -95,24 +101,74 @@ async def upload_document(
             s3_key_raw=key,
             title=title,
             group_id=gid,
-            sha256=file_hash,
+            sha256=file_hash,  # 🔥 A-1 핵심
         )
     )
     db.commit()
 
-    # 인덱싱에 **원본 바이트 그대로 전달** → S3 왕복 제거
-    # index_document 내부에서 extract_text_pages(...)를 호출하고,
-    # 그 함수가 PDF / DOCX / PPTX / TXT / MD를 자동 판별해서 텍스트를 뽑는다.
-    #
-    # 현재 인자 이름이 pdf_bytes지만, 의미상 "file_bytes" 역할을 한다는 점을 기억.
-    # TODO: 추후 indexer.py 수정 시 pdf_bytes → file_bytes 등으로 이름을 정리해도 됨.
+    # 원본 바이트 그대로 전달 (S3 왕복 제거)
     index_document(db, doc_id, key, title, pdf_bytes=content)
 
-    # FastAPI가 UUID를 자동 직렬화하지만, 확실히 하려면 str(...)로 반환
     return {
         "status": "indexed",
         "document_id": str(doc_id),
         "s3_key": key,
         "group_id": str(gid) if gid else None,
         "duplicate": False,
+    }
+
+
+# ---------------------------------------------------------
+# 2) 재인덱스 API (A-2 Step2)
+# ---------------------------------------------------------
+@router.post("/{document_id}/reindex")
+def reindex_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    특정 document_id에 대해 재인덱스를 수행한다.
+    - 기존 청크 싹 삭제
+    - S3 원본 기준으로 새로 extract→chunk→embed→저장
+    """
+    # UUID 파싱
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except Exception:
+        raise HTTPException(status_code=422, detail="invalid document_id (must be UUID)")
+
+    # 문서 조회
+    doc = (
+        db.query(Document)
+        .filter(
+            Document.id == doc_uuid,
+            Document.workspace == WORKSPACE,
+        )
+        .first()
+    )
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="document not found")
+
+    # 재인덱스 실행 (S3에서 원본 읽어옴)
+    try:
+        created_chunks = index_document(
+            db=db,
+            doc_id=doc.id,
+            s3_key=doc.s3_key_raw,
+            title=doc.title,
+            pdf_bytes=None,  # 재인덱스는 굳이 바이트 전달할 필요 없음
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"reindex failed: {type(e).__name__}: {e}",
+        )
+
+    return {
+        "status": "reindexed",
+        "document_id": document_id,
+        "workspace": doc.workspace,
+        "group_id": str(doc.group_id) if doc.group_id else None,
+        "chunks": created_chunks,
     }
