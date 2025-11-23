@@ -5,7 +5,7 @@ from app.models.db import SessionLocal
 from app.models.document import Document
 from app.services.s3 import put_pdf  # TODO: 멀티포맷 반영해서 나중에 put_document로 이름 변경 고려
 from app.services.indexer import index_document
-import os, uuid
+import os, uuid, hashlib
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -46,6 +46,26 @@ async def upload_document(
             status_code=400,
             detail=f"File too small: size={len(content)}, saved={dbg_path}",
         )
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    existing = (
+        db.query(Document)
+        .filter(
+            Document.workspace == WORKSPACE,
+            Document.sha256 == file_hash,
+        )
+        .first()
+    )
+
+    if existing:
+        # 🔁 멱등: 같은 파일이 이미 인덱싱되어 있음 → 재사용
+        return {
+            "status": "already_indexed",
+            "document_id": str(existing.id),
+            "s3_key": existing.s3_key_raw,
+            "group_id": str(existing.group_id) if existing.group_id else None,
+            "duplicate": True,
+        }
 
     print(
         f"[upload] len(content)={len(content)}, "
@@ -75,6 +95,7 @@ async def upload_document(
             s3_key_raw=key,
             title=title,
             group_id=gid,
+            sha256=file_hash,
         )
     )
     db.commit()
@@ -93,4 +114,5 @@ async def upload_document(
         "document_id": str(doc_id),
         "s3_key": key,
         "group_id": str(gid) if gid else None,
+        "duplicate": False,
     }

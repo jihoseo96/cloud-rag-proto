@@ -10,4 +10,5 @@ class Document(Base):
     workspace = Column(String, nullable=False)
     s3_key_raw = Column(String, nullable=False)
     title = Column(String, nullable=False)
+    sha256 = Column(String, nullable=True, index=True)
     created_at = Column(TIMESTAMP, server_default=text("now()"))
