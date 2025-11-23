@@ -1,0 +1,41 @@
+# app/models/answer.py
+import uuid
+from sqlalchemy import Column, String, Text, TIMESTAMP, text, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from pgvector.sqlalchemy import Vector
+from .db import Base
+
+class AnswerCard(Base):
+    __tablename__ = "answer_card"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace = Column(String, nullable=False)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("group.id", ondelete="CASCADE"), nullable=True)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    answer_plain = Column(Text, nullable=True)
+    status = Column(String, nullable=False, server_default=text("'draft'"))
+    created_by = Column(String, nullable=False)
+    reviewed_by = Column(String, nullable=True)
+    source_sha256_list = Column(ARRAY(String), nullable=False, server_default=text("ARRAY[]::text[]"))
+    created_at = Column(TIMESTAMP, server_default=text("now()"))
+    updated_at = Column(TIMESTAMP, server_default=text("now()"))
+
+class AnswerChunk(Base):
+    __tablename__ = "answer_chunk"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    answer_id = Column(UUID(as_uuid=True), ForeignKey("answer_card.id", ondelete="CASCADE"), nullable=False)
+    page = Column(Integer, nullable=False, default=0)
+    text = Column(Text, nullable=False)
+    embedding = Column(Vector(1536), nullable=False)
+
+class AnswerCardLog(Base):
+    __tablename__ = "answer_card_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    answer_id = Column(UUID(as_uuid=True), ForeignKey("answer_card.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String, nullable=False)      # 'created' | 'updated' | 'approved' | 'archived' | ...
+    actor = Column(String, nullable=False)
+    note = Column(Text, nullable=True)
+    at = Column(TIMESTAMP, server_default=text("now()"))
