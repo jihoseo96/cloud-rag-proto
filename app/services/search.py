@@ -1,7 +1,18 @@
 # app/services/search.py
+import os
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
+
+# ---------------------------------------------------------
+# A-4 검색 가중치 기본값
+# - 인스트럭션 기본: w_vec=0.6, w_lex=0.4, diversity_penalty=0.9
+# - 환경변수로 override 가능:
+#     SEARCH_W_VEC, SEARCH_W_LEX, SEARCH_DIVERSITY_PENALTY
+# ---------------------------------------------------------
+W_VEC_DEFAULT = float(os.getenv("SEARCH_W_VEC", "0.6"))
+W_LEX_DEFAULT = float(os.getenv("SEARCH_W_LEX", "0.4"))
+DIVERSITY_PENALTY_DEFAULT = float(os.getenv("SEARCH_DIVERSITY_PENALTY", "0.9"))
 
 
 def search_chunks(
@@ -9,9 +20,9 @@ def search_chunks(
     qvec: List[float],
     qtext: str,
     top_k: int = 6,
-    w_vec: float = 0.7,
-    w_lex: float = 0.3,
-    diversity_penalty: float = 0.9,
+    w_vec: float = W_VEC_DEFAULT,
+    w_lex: float = W_LEX_DEFAULT,
+    diversity_penalty: float = DIVERSITY_PENALTY_DEFAULT,
     per_doc_limit: int = 3,
     document_id: Optional[str] = None,
     workspace: str = "personal",
@@ -37,7 +48,7 @@ def search_chunks(
     }
     """
 
-    # AnswerCard 부스트 계수
+    # AnswerCard 부스트 계수 (A-4 기본값: 1.15 / 1.3)
     answer_boost = 1.3 if prefer_team_answer else 1.15
 
     sql = text(
