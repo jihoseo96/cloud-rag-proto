@@ -1,10 +1,12 @@
 # app/routes/documents.py
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
+from typing import List, Optional
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from app.models.db import SessionLocal
 from app.models.document import Document
-from app.services.s3 import put_pdf
+from app.models.chunk import Chunk
 from app.services.indexer import index_document
+from app.services.s3 import put_pdf, presign
 import os, uuid, hashlib
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -31,7 +33,7 @@ async def upload_document(
     file: UploadFile = File(...),
     title: str = Form(...),
     db: Session = Depends(get_db),
-    group_id: str | None = Form(None),
+    group_id: Optional[str] = Form(None),
 ):
     """
     파일 업로드 엔드포인트.
@@ -172,3 +174,44 @@ def reindex_document(
         "group_id": str(doc.group_id) if doc.group_id else None,
         "chunks": created_chunks,
     }
+
+
+# ---------------------------------------------------------
+# 3) 문서 목록 조회 (A-2 Step1)
+# ---------------------------------------------------------
+@router.get("/list")
+def list_documents(
+    group_id: Optional[str] = None,
+    workspace: str = WORKSPACE,
+    db: Session = Depends(get_db),
+):
+    """
+    문서 목록 조회.
+    - group_id가 있으면 해당 그룹의 문서만 조회
+    - 없으면 해당 workspace의 모든 문서 조회 (개인 문서 포함)
+    """
+    query = db.query(Document).filter(Document.workspace == workspace)
+
+    if group_id:
+        try:
+            gid = uuid.UUID(group_id)
+            query = query.filter(Document.group_id == gid)
+        except ValueError:
+            # group_id가 유효하지 않은 UUID면 빈 리스트 반환 or 400
+            return []
+    
+    # 최신순 정렬
+    docs = query.order_by(Document.created_at.desc()).all()
+
+    return [
+        {
+            "id": str(d.id),
+            "title": d.title,
+            "s3_key_raw": d.s3_key_raw,
+            "sha256": d.sha256,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "group_id": str(d.group_id) if d.group_id else None,
+            "workspace": d.workspace,
+        }
+        for d in docs
+    ]

@@ -1,2 +1,14 @@
 fastapi
 uvicorn[standard]
+olefile
+pyhwp
+pdfplumber
+psycopg[binary]
+alembic
+boto3
+openai
+pgvector
+cryptography
+pyopenssl
+python-multipart
+rapidfuzz

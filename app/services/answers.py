@@ -1,86 +1,122 @@
-# app/services/answers.py
+from typing import List, Optional, Dict, Any
+from uuid import UUID
 import uuid
-from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
-from app.models.answer import AnswerCard, AnswerChunk, AnswerCardLog
-from app.services.embed import embed_texts
-from app.services.chunker import chunk_pages
+from sqlalchemy.orm.attributes import flag_modified
+from app.models.answer import AnswerCard
+from app.services.guardrail import assess_risk
 
 def create_answer_card(
     db: Session,
     workspace: str,
-    group_id,
+    group_id: Optional[UUID],
     question: str,
     answer: str,
     created_by: str,
-    source_sha256_list: Optional[list[str]] = None,
+    source_sha256_list: List[str],
+    anchors: Optional[List[Dict[str, Any]]] = None,
+    facts: Optional[Dict[str, Any]] = None
 ) -> AnswerCard:
+    """
+    Create a new AnswerCard.
+    - Initial answer is added as the first 'variant' (APPROVED by default if created by admin, else PENDING).
+    - For MVP, we assume initial creation is 'pending' or 'approved' based on logic. 
+    - Let's keep status as 'pending' for review.
+    """
+    # Create initial variant from the answer text
+    initial_variant = {
+        "content": answer,
+        "context": "default",
+        "status": "PENDING", # Initial creation requires review
+        "risk_level": assess_risk(answer, facts or {}).get("risk_level", "SAFE"),
+        "usage_count": 0,
+        "created_by": created_by
+    }
+
     card = AnswerCard(
         id=uuid.uuid4(),
         workspace=workspace,
         group_id=group_id,
         question=question,
-        answer=answer,
-        answer_plain=answer,  # 일단은 그대로 저장, 추후 [n] 제거 로직 넣어도 됨
-        status="draft",
+        answer=answer, # Main display answer (usually the approved one)
         created_by=created_by,
-        source_sha256_list=source_sha256_list or [],
+        source_sha256_list=source_sha256_list,
+        status="pending",
+        anchors=anchors or [],
+        facts=facts or {},
+        variants=[initial_variant]
     )
     db.add(card)
-    db.flush()  # card.id 확보
-
-    _index_answer_card(db, card)
-
-    db.add(AnswerCardLog(
-        id=uuid.uuid4(),
-        answer_id=card.id,
-        action="created",
-        actor=created_by,
-        note=None,
-    ))
     db.commit()
     db.refresh(card)
     return card
 
-def _index_answer_card(db: Session, card: AnswerCard):
+def add_variant(
+    db: Session,
+    answer_id: UUID,
+    content: str,
+    context: str,
+    created_by: str
+) -> Optional[AnswerCard]:
     """
-    answer 전체를 한 페이지로 보고 chunk_pages 재사용해서 쪼갠 뒤 임베딩 저장.
+    Add a new variant to an existing AnswerCard.
+    Risk assessment is performed automatically.
     """
-    # chunk_pages는 List[str] → [{page,text}] 구조니까 리스트로 감싸줌
-    chunks = chunk_pages([card.answer])  # page=1로 돌아오지만 어차피 가상이라 상관 없음
+    card = db.get(AnswerCard, answer_id)
+    if not card:
+        return None
 
-    texts = [c["text"] for c in chunks]
-    embs = embed_texts(texts)
+    risk_info = assess_risk(content, card.facts or {})
+    
+    new_variant = {
+        "content": content,
+        "context": context,
+        "status": "PENDING",
+        "risk_level": risk_info.get("risk_level", "SAFE"),
+        "risk_reason": risk_info.get("reason", ""),
+        "usage_count": 0,
+        "created_by": created_by
+    }
 
-    for c, emb in zip(chunks, embs):
-        db.add(AnswerChunk(
-            id=uuid.uuid4(),
-            answer_id=card.id,
-            page=0,               # 정답 카드는 가상 페이지 0으로 통일
-            text=c["text"],
-            embedding=emb,
-        ))
+    # Append to variants list
+    # SQLAlchemy requires re-assignment or flag_modified for JSONB mutation detection
+    current_variants = list(card.variants) if card.variants else []
+    current_variants.append(new_variant)
+    card.variants = current_variants
+    
+    db.commit()
+    db.refresh(card)
+    return card
 
 def approve_answer_card(
     db: Session,
-    answer_id,
+    answer_id: UUID,
     reviewer: str,
-    note: Optional[str] = None,
+    note: Optional[str] = None
 ) -> AnswerCard:
+    """
+    Approve an existing AnswerCard.
+    Also marks the latest PENDING variant as APPROVED.
+    """
     card = db.get(AnswerCard, answer_id)
     if not card:
-        raise ValueError("answer_card not found")
-
+        raise ValueError(f"AnswerCard {answer_id} not found")
+    
     card.status = "approved"
     card.reviewed_by = reviewer
+    
+    # Approve the latest pending variant if any
+    if card.variants:
+        variants = list(card.variants)
+        for v in reversed(variants):
+            if v.get("status") == "PENDING":
+                v["status"] = "APPROVED"
+                v["approved_by"] = reviewer
+                # Update main answer text to this approved variant
+                card.answer = v["content"]
+                break
+        card.variants = variants
 
-    db.add(AnswerCardLog(
-        id=uuid.uuid4(),
-        answer_id=card.id,
-        action="approved",
-        actor=reviewer,
-        note=note,
-    ))
     db.commit()
     db.refresh(card)
     return card

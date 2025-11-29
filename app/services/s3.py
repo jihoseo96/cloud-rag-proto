@@ -1,4 +1,5 @@
 import os, uuid, boto3
+from typing import Tuple
 from botocore.client import Config
 
 S3_BUCKET = os.getenv("S3_BUCKET")
@@ -7,7 +8,7 @@ WORKSPACE = os.getenv("WORKSPACE","personal")
 
 s3 = boto3.client("s3", region_name=REGION, config=Config(s3={'addressing_style':'virtual'}))
 
-def put_pdf(file_bytes: bytes, title: str) -> tuple[str,str]:
+def put_pdf(file_bytes: bytes, title: str) -> Tuple[str,str]:
     doc_id = uuid.uuid4()
     key = f"{WORKSPACE}/{doc_id}/raw.pdf"
     s3.put_object(Bucket=S3_BUCKET, Key=key, Body=file_bytes, ContentType="application/pdf")

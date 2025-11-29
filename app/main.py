@@ -4,6 +4,7 @@ import time
 import uuid
 import json
 import logging
+from typing import List, Dict, Tuple
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,43 +12,44 @@ from fastapi.staticfiles import StaticFiles
 
 import boto3
 from botocore.exceptions import ProfileNotFound, NoCredentialsError, ClientError
-
 from dotenv import load_dotenv
 from sqlalchemy import text
+
+# .env 로드
+load_dotenv()
 
 from app.routes.health import router as health_router
 from app.routes.documents import router as doc_router
 from app.routes.query import router as query_router
 from app.routes.groups import router as groups_router
 from app.routes.answers import router as answers_router
+from app.routes.chats import router as chats_router
 from app.db import engine
-
-# .env 로드
-load_dotenv()
+from app.models.db import Base
+# Import all models to ensure they are registered with Base.metadata
+from app.models.project import Project
+from app.models.rfp_requirement import RFPRequirement
+from app.models.audit_log import AuditLog
+from app.models.answer import AnswerCard
 
 # ---------------------------------------------------------
 # 로거 설정
-# - 실제 운영에서는 구조화 로그(JSON)를 수집/분석 도구(CloudWatch, ELK 등)에 붙이는 용도
 # ---------------------------------------------------------
 logger = logging.getLogger("rag_proto")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
-
 
 # ---------------------------------------------------------
 # 환경변수
 # ---------------------------------------------------------
 WORKSPACE = os.getenv("WORKSPACE", "personal")
 REGION = os.getenv("REGION", "ap-northeast-2")
-
-# Rate Limit 환경변수 (기본값: 분당 30회)
 RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "30"))
-
 
 # ---------------------------------------------------------
 # CORS ORIGINS 설정 (A-5)
 # ---------------------------------------------------------
-def _get_cors_origins() -> list[str]:
+def _get_cors_origins() -> List[str]:
     raw = os.getenv("CORS_ORIGINS")
     if raw:
         origins = [o.strip() for o in raw.split(",") if o.strip()]
@@ -63,7 +65,6 @@ def _get_cors_origins() -> list[str]:
         "http://127.0.0.1:8000",
     ]
 
-
 app = FastAPI(title="RAG Prototype", version="0.2.0")
 
 CORS_ALLOWED_ORIGINS = _get_cors_origins()
@@ -76,75 +77,96 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------
+# Safe Migration Logic
+# ---------------------------------------------------------
+def run_safe_migration():
+    """
+    Check for missing columns in existing tables and add them if necessary.
+    Specifically for 'answer_card' table adding 'anchors', 'variants', 'facts'.
+    """
+    try:
+        with engine.connect() as conn:
+            # Check if answer_card table exists
+            result = conn.execute(text("SELECT to_regclass('public.answer_card')"))
+            if result.scalar() is None:
+                return # Table doesn't exist, create_all will handle it
+
+            # Check for 'anchors' column
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='answer_card' AND column_name='anchors'"
+            ))
+            if result.fetchone() is None:
+                logger.info("Migration: Adding 'anchors' column to answer_card")
+                conn.execute(text("ALTER TABLE answer_card ADD COLUMN anchors JSONB"))
+
+            # Check for 'variants' column
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='answer_card' AND column_name='variants'"
+            ))
+            if result.fetchone() is None:
+                logger.info("Migration: Adding 'variants' column to answer_card")
+                conn.execute(text("ALTER TABLE answer_card ADD COLUMN variants JSONB"))
+
+            # Check for 'facts' column
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='answer_card' AND column_name='facts'"
+            ))
+            if result.fetchone() is None:
+                logger.info("Migration: Adding 'facts' column to answer_card")
+                conn.execute(text("ALTER TABLE answer_card ADD COLUMN facts JSONB"))
+            
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Migration failed: {e}")
+
+# Run safe migration
+run_safe_migration()
+
+# Create tables if they don't exist
+Base.metadata.create_all(bind=engine)
+
 
 # ---------------------------------------------------------
 # A-6 RATE LIMIT (IP 기반 고정 윈도우)
-#
-# 현재는 로컬 개발 및 단일 인스턴스 환경을 고려하여
-# "서버 메모리(dict)" 기반으로 구현한다.
-#
-# ⚠️ 주의:
-#   - 이 방식은 서버 재시작 시 카운트가 초기화되며
-#   - 서버를 여러 대로 확장하면 인스턴스별로 별도 카운트가 생성되므로
-#     실제 Rate Limit로 작동하지 않는다.
-#
-# 👉 실제 운영 배포 전에 반드시 Redis 또는 DB 기반으로
-#    Rate Limit 상태를 공유/영속화하는 방식으로 교체해야 한다.
 # ---------------------------------------------------------
-
-_rate_limit_store: dict[tuple[str, int], int] = {}  # {(ip, window_start_minute): count}
-
+_rate_limit_store: Dict[Tuple[str, int], int] = {}
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """
-    /query 엔드포인트에 대해 IP당 분당 RATE_LIMIT_PER_MIN 회 제한.
-    """
     path = request.url.path
-    if path != "/query":  # 필요하면 다른 엔드포인트에도 확장 가능
+    if path != "/query":
         return await call_next(request)
 
     client_ip = request.client.host or "unknown"
-
     now = int(time.time())
-    window = now // 60  # 1분 단위 fixed-window
-
+    window = now // 60
     key = (client_ip, window)
-
     count = _rate_limit_store.get(key, 0)
 
     if count >= RATE_LIMIT_PER_MIN:
-        # Rate Limit 초과 → 429 반환
         raise HTTPException(
             status_code=429,
             detail=f"Too Many Requests: {RATE_LIMIT_PER_MIN} per minute limit exceeded.",
         )
 
-    # 카운트 증가
     _rate_limit_store[key] = count + 1
-
     response = await call_next(request)
-
-    # 남은 요청 수 헤더 추가 (선택)
     remaining = max(RATE_LIMIT_PER_MIN - _rate_limit_store[key], 0)
     response.headers["X-RateLimit-Limit"] = str(RATE_LIMIT_PER_MIN)
     response.headers["X-RateLimit-Remaining"] = str(remaining)
-
     return response
-
 
 # ---------------------------------------------------------
 # A-7 공통 Request 로깅 미들웨어
-#
-# - 모든 요청에 대해:
-#   - request_id 부여
-#   - method / path / status / latency_ms / ip / workspace 로깅
-# - stdout(JSON)로 찍어두고, 나중에 CloudWatch/ELK/Grafana 등으로 수집하기 좋게 설계
 # ---------------------------------------------------------
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
-    request.state.request_id = request_id  # 라우터에서 접근 가능
+    request.state.request_id = request_id
 
     start = time.time()
     client_ip = request.client.host or "unknown"
@@ -155,7 +177,6 @@ async def request_logging_middleware(request: Request, call_next):
         response = await call_next(request)
         status_code = response.status_code
     except Exception as e:
-        # 예외가 발생한 경우에도 로그를 남긴다.
         status_code = 500
         duration_ms = int((time.time() - start) * 1000)
         log_data = {
@@ -186,12 +207,8 @@ async def request_logging_middleware(request: Request, call_next):
         "workspace": WORKSPACE,
     }
     logger.info(json.dumps(log_data, ensure_ascii=False))
-
-    # 요청-응답 추적을 위해 헤더에 request_id 노출
     response.headers["X-Request-ID"] = request_id
-
     return response
-
 
 # ---------------------------------------------------------
 # 정적 파일 서빙
@@ -206,7 +223,13 @@ app.include_router(doc_router)
 app.include_router(query_router)
 app.include_router(groups_router)
 app.include_router(answers_router)
-
+app.include_router(chats_router)
+from app.routes.ingest import router as ingest_router
+app.include_router(ingest_router)
+from app.routes.shredder import router as shredder_router
+app.include_router(shredder_router)
+from app.routes.proposal import router as proposal_router
+app.include_router(proposal_router)
 
 # ---------------------------------------------------------
 # 헬스체크
@@ -221,9 +244,7 @@ def health_check():
             status_code=500,
             detail=f"DB connection failed: {type(e).__name__}: {e}",
         )
-
     return {"status": "ok", "workspace": WORKSPACE, "region": REGION}
-
 
 # ---------------------------------------------------------
 # S3 PING 테스트
@@ -232,15 +253,12 @@ def health_check():
 def s3_ping():
     bucket = "cloud-rag-proto-jihoprototest-apne2"
     prefix = "personal/test/"
-
     try:
         session = boto3.Session(profile_name="personal")
         s3 = session.client("s3", region_name=REGION)
-
         resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=10)
         keys = [item["Key"] for item in resp.get("Contents", [])]
         return {"bucket": bucket, "prefix": prefix, "objects": keys}
-
     except ProfileNotFound as e:
         raise HTTPException(status_code=500, detail=f"AWS profile not found: {e}")
     except NoCredentialsError as e:

@@ -1,7 +1,8 @@
 # app/models/answer.py
 import uuid
-from sqlalchemy import Column, String, Text, TIMESTAMP, text, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Integer, text, TIMESTAMP
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from .db import Base
 
@@ -18,6 +19,9 @@ class AnswerCard(Base):
     created_by = Column(String, nullable=False)
     reviewed_by = Column(String, nullable=True)
     source_sha256_list = Column(ARRAY(String), nullable=False, server_default=text("ARRAY[]::text[]"))
+    anchors = Column(JSONB, nullable=True)
+    variants = Column(JSONB, nullable=True)
+    facts = Column(JSONB, nullable=True)
     created_at = Column(TIMESTAMP, server_default=text("now()"))
     updated_at = Column(TIMESTAMP, server_default=text("now()"))
 

@@ -125,7 +125,7 @@ def _extract_plain_text_pages_from_bytes(data: bytes) -> List[str]:
     return [txt]
 
 
-def extract_text_pages(fp) -> list[str]:
+def extract_text_pages(fp) -> List[str]:
     """
     NOTE: 기존 시그니처 유지 (indexer에서 그대로 사용 가능).
     변경점:

@@ -1,14 +1,14 @@
 # app/routes/answers.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 import os
 
 from sqlalchemy.orm import Session
 from app.models.db import SessionLocal
 from app.models.answer import AnswerCard
-from app.services.answers import create_answer_card, approve_answer_card
+from app.services.answers import create_answer_card, approve_answer_card, add_variant
 
 router = APIRouter(prefix="/answers", tags=["answers"])
 
@@ -27,10 +27,17 @@ class AnswerCitation(BaseModel):
     sha256: Optional[str] = None
 
 class AnswerCreateBody(BaseModel):
-    group_id: Optional[UUID]
+    group_id: Optional[UUID] = None
     question: str
     answer: str
     citations: List[AnswerCitation] = []
+    created_by: str
+    anchors: List[Dict[str, Any]] = []
+    facts: Dict[str, Any] = {}
+
+class VariantCreateBody(BaseModel):
+    content: str
+    context: str = "default"
     created_by: str
 
 @router.post("")
@@ -49,6 +56,8 @@ def create_answer(body: AnswerCreateBody, db: Session = Depends(get_db)):
         answer=body.answer,
         created_by=body.created_by,
         source_sha256_list=source_sha256_list,
+        anchors=body.anchors,
+        facts=body.facts
     )
     return {"id": str(card.id), "status": card.status}
 
@@ -64,10 +73,24 @@ def approve_answer(answer_id: UUID, body: ApproveBody, db: Session = Depends(get
         raise HTTPException(404, "answer_card not found")
     return {"id": str(card.id), "status": card.status}
 
+@router.put("/{answer_id}/variant")
+def add_answer_variant(answer_id: UUID, body: VariantCreateBody, db: Session = Depends(get_db)):
+    card = add_variant(
+        db=db,
+        answer_id=answer_id,
+        content=body.content,
+        context=body.context,
+        created_by=body.created_by
+    )
+    if not card:
+        raise HTTPException(404, "answer_card not found")
+    
+    return {"id": str(card.id), "variants": card.variants}
+
 @router.get("")
 def list_answers(
     group_id: Optional[UUID] = Query(None),
-    status: str = Query("approved"),
+    status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(AnswerCard).filter(AnswerCard.workspace == WORKSPACE)
@@ -86,6 +109,9 @@ def list_answers(
             "created_by": c.created_by,
             "reviewed_by": c.reviewed_by,
             "created_at": c.created_at,
+            "variants": c.variants,
+            "anchors": c.anchors,
+            "facts": c.facts
         }
         for c in cards
     ]

@@ -1,5 +1,6 @@
 # app/services/indexer.py
 import uuid
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.services.s3 import get_pdf_bytes
 from .extract import extract_text_pages
@@ -12,7 +13,7 @@ def index_document(
     doc_id,            # uuid.UUID 권장
     s3_key: str,
     title: str,
-    pdf_bytes: bytes | None = None,
+    pdf_bytes: Optional[bytes] = None,
 ) -> int:
     """
     주어진 document에 대해 인덱싱(또는 재인덱싱)을 수행한다.

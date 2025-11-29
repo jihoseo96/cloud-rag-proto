@@ -20,6 +20,8 @@ class GroupMember(Base):
 
 class GroupInstruction(Base):
     __tablename__ = "group_instruction"
-    group_id = Column(UUID(as_uuid=True), ForeignKey("group.id", ondelete="CASCADE"), primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    group_id = Column(UUID(as_uuid=True), ForeignKey("group.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
     instruction = Column(String, nullable=False)
     updated_at = Column(TIMESTAMP, server_default=text("now()"))

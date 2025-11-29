@@ -1,4 +1,21 @@
-import { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  listGroups,
+  createChatApi,
+  listChats,
+  uploadDocument,
+  listDocuments,
+  listAnswers,
+
+  getGroupInstructions,
+  createGroupInstruction,
+  updateGroupInstruction,
+  deleteGroupInstruction,
+  Group,
+  Chat,
+  GroupInstructionDto,
+} from '../lib/api';
 import { ArrowLeft, Plus, Users, Trash2, UserPlus, Mail, Menu, X, BarChart3, FileText, MessageSquare, Upload, Download, TrendingUp, Clock, Folder, FolderPlus, ChevronRight, MoreVertical, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -12,6 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from './ui/dropdown-menu';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './ui/breadcrumb';
 import DocumentViewer from './DocumentViewer';
+import { GroupInstructionEditDialog } from './GroupInstructionEditDialog';
 
 interface Team {
   id: string;
@@ -63,10 +81,10 @@ interface TeamManagementProps {
   onUpdateStandardAnswer: (id: string, status: 'approved' | 'rejected') => void;
 }
 
-export default function TeamManagement({ 
-  onBack, 
-  teams, 
-  onCreateTeam, 
+export default function TeamManagement({
+  onBack,
+  teams,
+  onCreateTeam,
   onDeleteTeam,
   initialSelectedTeam = null,
   initialSidebarCollapsed = false,
@@ -79,31 +97,108 @@ export default function TeamManagement({
   const [newTeamDescription, setNewTeamDescription] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(initialShowCreateDialog);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(initialSidebarCollapsed);
-  
+
   // File management states
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [isCreateFolderDialogOpen, setIsCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [openedFile, setOpenedFile] = useState<FileItem | null>(null);
-  const [fileItems, setFileItems] = useState<FileItem[]>([
-    // Root level files
-    { id: '1', name: '마케팅 전략.pdf', type: 'file', size: '2.4 MB', uploader: 'Sarah Kim', date: '2024-11-04', parentId: null },
-    { id: '2', name: '분석 리포트.xlsx', type: 'file', size: '1.8 MB', uploader: 'John Smith', date: '2024-11-03', parentId: null },
-    { id: '3', name: '프로젝트 자료', type: 'folder', parentId: null },
-    { id: '4', name: '회의록', type: 'folder', parentId: null },
-    
-    // Files in '프로젝트 자료' folder (id: 3)
-    { id: '5', name: '디자인 가이드.fig', type: 'file', size: '5.2 MB', uploader: 'Adela Parkson', date: '2024-11-02', parentId: '3' },
-    { id: '6', name: '프로젝트 계획서.pptx', type: 'file', size: '3.7 MB', uploader: 'Sarah Kim', date: '2024-10-31', parentId: '3' },
-    { id: '7', name: '2024 Q1', type: 'folder', parentId: '3' },
-    
-    // Files in '회의록' folder (id: 4)
-    { id: '8', name: '회의록.docx', type: 'file', size: '156 KB', uploader: 'David Lee', date: '2024-11-01', parentId: '4' },
-    { id: '9', name: '10월 회의록.docx', type: 'file', size: '203 KB', uploader: 'John Smith', date: '2024-10-28', parentId: '4' },
-    
-    // Files in '2024 Q1' folder (id: 7)
-    { id: '10', name: 'Q1 보고서.pdf', type: 'file', size: '4.1 MB', uploader: 'Sarah Kim', date: '2024-03-31', parentId: '7' },
-  ]);
+  const [fileItems, setFileItems] = useState<FileItem[]>([]);
+  const [answers, setAnswers] = useState<StandardAnswer[]>([]);
+
+  const [prompts, setPrompts] = useState<GroupInstructionDto[]>([]);
+  const [isInstructionDialogOpen, setIsInstructionDialogOpen] = useState(false);
+  const [editingInstruction, setEditingInstruction] = useState<GroupInstructionDto | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load documents, answers, and instruction from backend
+  useEffect(() => {
+    if (!selectedTeam) return;
+
+    const loadData = async () => {
+      try {
+        // Load Documents
+        const docs = await listDocuments({ groupId: selectedTeam });
+        const mappedFiles: FileItem[] = docs.map(d => ({
+          id: d.id,
+          name: d.title,
+          type: 'file',
+          size: 'Unknown',
+          uploader: 'Unknown',
+          date: new Date(d.created_at).toLocaleDateString(),
+          parentId: null
+        }));
+        setFileItems(mappedFiles);
+
+        // Load Answers
+        const backendAnswers = await listAnswers({ groupId: selectedTeam });
+        const mappedAnswers: StandardAnswer[] = backendAnswers.map(a => ({
+          id: a.id,
+          teamId: a.group_id || '',
+          question: a.question,
+          answer: a.answer,
+          requestedBy: a.created_by || 'Unknown',
+          requestedAt: a.created_at ? new Date(a.created_at) : new Date(),
+          status: a.status as 'pending' | 'approved' | 'rejected',
+          approvedBy: a.reviewed_by || undefined,
+          approvedAt: a.updated_at ? new Date(a.updated_at) : undefined,
+          chatId: '',
+          messageId: ''
+        }));
+        setAnswers(mappedAnswers);
+
+        // 3. Load Group Instructions
+        try {
+          const instructions = await getGroupInstructions(selectedTeam);
+          setPrompts(instructions);
+        } catch (error) {
+          console.error('Failed to load instructions', error);
+          setPrompts([]);
+        }
+      } catch (e) {
+        console.error('Failed to load data', e);
+      }
+    };
+    loadData();
+  }, [selectedTeam]);
+
+  const handleFileUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedTeam) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', file.name);
+      formData.append('group_id', selectedTeam);
+
+      await uploadDocument(formData);
+
+      // Refresh list
+      const docs = await getDocuments({ groupId: selectedTeam });
+      const mappedFiles: FileItem[] = docs.map(d => ({
+        id: d.id,
+        name: d.title,
+        type: 'file',
+        size: 'Unknown',
+        uploader: 'Unknown',
+        date: new Date(d.created_at).toLocaleDateString(),
+        parentId: null
+      }));
+      setFileItems(mappedFiles);
+
+    } catch (e) {
+      console.error('Upload failed', e);
+      alert('파일 업로드 실패');
+    } finally {
+      // Reset input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
     setSelectedTeam(initialSelectedTeam);
@@ -148,7 +243,7 @@ export default function TeamManagement({
     // Check if it's an Office file or PDF
     const viewableExtensions = ['.xlsx', '.docx', '.pptx', '.xls', '.doc', '.ppt', '.pdf'];
     const isViewableFile = viewableExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-    
+
     if (isViewableFile) {
       setOpenedFile(file);
     }
@@ -162,6 +257,47 @@ export default function TeamManagement({
       setFileItems(prev => prev.filter(item => item.id !== id));
     };
     deleteRecursive(itemId);
+  };
+
+  const handleSaveInstruction = async (title: string, content: string) => {
+    if (!selectedTeam) return;
+    try {
+      if (editingInstruction?.id) {
+        await updateGroupInstruction(selectedTeam, editingInstruction.id, title, content);
+      } else {
+        await createGroupInstruction(selectedTeam, title, content);
+      }
+
+      // Refresh
+      const instructions = await getGroupInstructions(selectedTeam);
+      setPrompts(instructions);
+      setIsInstructionDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to save instruction', error);
+      alert('프롬프트 저장 실패');
+    }
+  };
+
+  const handleDeleteInstruction = async (instructionId: string) => {
+    if (!selectedTeam || !confirm('정말 삭제하시겠습니까?')) return;
+    try {
+      await deleteGroupInstruction(selectedTeam, instructionId);
+      // Refresh
+      const instructions = await getGroupInstructions(selectedTeam);
+      setPrompts(instructions);
+    } catch (error) {
+      console.error('Failed to delete instruction', error);
+      alert('삭제 실패');
+    }
+  };
+
+  const openInstructionDialog = (instruction?: GroupInstructionDto) => {
+    if (instruction) {
+      setEditingInstruction(instruction);
+    } else {
+      setEditingInstruction(null);
+    }
+    setIsInstructionDialogOpen(true);
   };
 
   // Get current folder path for breadcrumb
@@ -214,14 +350,13 @@ export default function TeamManagement({
               <button
                 key={team.id}
                 onClick={() => setSelectedTeam(team.id)}
-                className={`w-full text-left p-4 rounded-xl transition-all ${
-                  selectedTeam === team.id
-                    ? 'bg-gradient-to-r from-[#E0F2FE] to-[#FAE8FF] border-l-4 border-[#0EA5E9]'
-                    : 'hover:bg-[#f0f9ff] border-l-4 border-transparent'
-                }`}
+                className={`w - full text - left p - 4 rounded - xl transition - all ${selectedTeam === team.id
+                  ? 'bg-gradient-to-r from-[#E0F2FE] to-[#FAE8FF] border-l-4 border-[#0EA5E9]'
+                  : 'hover:bg-[#f0f9ff] border-l-4 border-transparent'
+                  } `}
               >
                 <div className="flex items-start gap-3">
-                  <Users className={`w-5 h-5 mt-1 ${selectedTeam === team.id ? 'text-[#0EA5E9]' : 'text-[#718096]'}`} />
+                  <Users className={`w - 5 h - 5 mt - 1 ${selectedTeam === team.id ? 'text-[#0EA5E9]' : 'text-[#718096]'} `} />
                   <div className="flex-1 min-w-0">
                     <h3 className="text-[14px] font-semibold mb-1 truncate text-[#1b2559]">
                       {team.name}
@@ -279,41 +414,41 @@ export default function TeamManagement({
 
               <Tabs defaultValue="dashboard" className="w-full">
                 <TabsList className="w-full justify-start rounded-none border-b-0 bg-transparent px-8 h-12">
-                  <TabsTrigger 
-                    value="dashboard" 
+                  <TabsTrigger
+                    value="dashboard"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-[#0EA5E9] rounded-none data-[state=active]:bg-transparent data-[state=active]:text-[#0EA5E9] text-[#718096]"
                   >
                     <BarChart3 className="w-4 h-4 mr-2" />
                     대시보드
                   </TabsTrigger>
-                  <TabsTrigger 
-                    value="files" 
+                  <TabsTrigger
+                    value="files"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-[#0EA5E9] rounded-none data-[state=active]:bg-transparent data-[state=active]:text-[#0EA5E9] text-[#718096]"
                   >
                     <FileText className="w-4 h-4 mr-2" />
                     파일
                   </TabsTrigger>
-                  <TabsTrigger 
-                    value="answers" 
+                  <TabsTrigger
+                    value="answers"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-[#0EA5E9] rounded-none data-[state=active]:bg-transparent data-[state=active]:text-[#0EA5E9] text-[#718096]"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Answer Card
-                    {selectedTeamData && standardAnswers.filter(sa => sa.teamId === selectedTeamData.id && sa.status === 'pending').length > 0 && (
+                    {selectedTeamData && answers.filter(sa => sa.status === 'pending').length > 0 && (
                       <Badge className="ml-2 bg-red-500 text-white h-5 w-5 p-0 flex items-center justify-center rounded-full text-[10px]">
-                        {standardAnswers.filter(sa => sa.teamId === selectedTeamData.id && sa.status === 'pending').length}
+                        {answers.filter(sa => sa.status === 'pending').length}
                       </Badge>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger 
-                    value="prompts" 
+                  <TabsTrigger
+                    value="prompts"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-[#0EA5E9] rounded-none data-[state=active]:bg-transparent data-[state=active]:text-[#0EA5E9] text-[#718096]"
                   >
                     <MessageSquare className="w-4 h-4 mr-2" />
                     프롬프트
                   </TabsTrigger>
-                  <TabsTrigger 
-                    value="members" 
+                  <TabsTrigger
+                    value="members"
                     className="data-[state=active]:border-b-2 data-[state=active]:border-[#0EA5E9] rounded-none data-[state=active]:bg-transparent data-[state=active]:text-[#0EA5E9] text-[#718096]"
                   >
                     <Users className="w-4 h-4 mr-2" />
@@ -446,18 +581,27 @@ export default function TeamManagement({
                         <p className="text-[14px] text-[#718096]">팀에서 공유된 모든 파일을 관리하세요</p>
                       </div>
                       <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="border-[#0EA5E9] text-[#0EA5E9] hover:bg-[#f0f9ff]"
                           onClick={() => setIsCreateFolderDialogOpen(true)}
                         >
                           <FolderPlus className="w-4 h-4 mr-2" />
                           폴더 생성
                         </Button>
-                        <Button className="bg-gradient-to-r from-[#0EA5E9] to-[#8B5CF6] hover:opacity-90 text-white">
+                        <Button
+                          className="bg-gradient-to-r from-[#0EA5E9] to-[#8B5CF6] hover:opacity-90 text-white"
+                          onClick={handleFileUploadClick}
+                        >
                           <Upload className="w-4 h-4 mr-2" />
                           파일 업로드
                         </Button>
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
                       </div>
                     </div>
 
@@ -466,7 +610,7 @@ export default function TeamManagement({
                       <Breadcrumb>
                         <BreadcrumbList>
                           <BreadcrumbItem>
-                            <button 
+                            <button
                               onClick={() => setCurrentFolderId(null)}
                               className="cursor-pointer text-[#0EA5E9] hover:text-[#0EA5E9] hover:underline"
                             >
@@ -482,7 +626,7 @@ export default function TeamManagement({
                                 {idx === folderPath.length - 1 ? (
                                   <BreadcrumbPage className="text-[#1b2559]">{folder.name}</BreadcrumbPage>
                                 ) : (
-                                  <button 
+                                  <button
                                     onClick={() => setCurrentFolderId(folder.id)}
                                     className="cursor-pointer text-[#0EA5E9] hover:text-[#0EA5E9] hover:underline"
                                   >
@@ -516,7 +660,7 @@ export default function TeamManagement({
                             </TableRow>
                           ) : (
                             currentItems.map((item) => (
-                              <TableRow 
+                              <TableRow
                                 key={item.id}
                                 className="cursor-pointer hover:bg-[#f4f7fe]"
                                 onClick={() => item.type === 'folder' ? handleFolderClick(item.id) : handleFileClick(item)}
@@ -559,7 +703,7 @@ export default function TeamManagement({
                                           <DropdownMenuSeparator />
                                         </>
                                       )}
-                                      <DropdownMenuItem 
+                                      <DropdownMenuItem
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleDeleteItem(item.id);
@@ -588,8 +732,7 @@ export default function TeamManagement({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {standardAnswers
-                        .filter(sa => sa.teamId === selectedTeamData.id)
+                      {answers
                         .map((answer, idx) => (
                           <Card key={idx} className="p-5 border-[#E9EDF7] hover:shadow-md transition-shadow cursor-pointer">
                             <div className="flex items-start justify-between mb-3">
@@ -597,14 +740,14 @@ export default function TeamManagement({
                                 <h4 className="text-[15px] font-semibold text-[#1b2559] mb-1">{answer.question}</h4>
                                 <p className="text-[13px] text-[#718096]">{answer.answer}</p>
                               </div>
-                              <Badge 
-                                variant="outline" 
+                              <Badge
+                                variant="outline"
                                 className={
-                                  answer.status === 'approved' 
-                                    ? 'border-green-500 text-green-600 ml-2' 
+                                  answer.status === 'approved'
+                                    ? 'border-green-500 text-green-600 ml-2'
                                     : answer.status === 'rejected'
-                                    ? 'border-red-500 text-red-600 ml-2'
-                                    : 'border-amber-500 text-amber-600 ml-2'
+                                      ? 'border-red-500 text-red-600 ml-2'
+                                      : 'border-amber-500 text-amber-600 ml-2'
                                 }
                               >
                                 {answer.status === 'approved' ? '승인됨' : answer.status === 'rejected' ? '거부됨' : '대기중'}
@@ -612,7 +755,7 @@ export default function TeamManagement({
                             </div>
                             <div className="flex items-center justify-between text-[12px] text-[#718096]">
                               <span>요청자: {answer.requestedBy}</span>
-                              
+
                               {answer.status === 'pending' ? (
                                 <div className="flex gap-2">
                                   <Button
@@ -651,74 +794,62 @@ export default function TeamManagement({
 
                   {/* Prompts Tab */}
                   <TabsContent value="prompts" className="p-8 m-0">
-                    <div className="mb-6 flex items-center justify-between">
+                    <div className="flex justify-between items-center mb-6">
                       <div>
-                        <h3 className="text-[20px] font-semibold text-[#1b2559] mb-2">프롬프트 라이브러리</h3>
-                        <p className="text-[14px] text-[#718096]">팀에서 자주 사용하는 프롬프트를 저장하고 공유하세요</p>
+                        <h3 className="text-[20px] font-semibold text-[#1b2559] mb-2">Group Prompts</h3>
+                        <p className="text-[14px] text-[#718096]">팀 멤버들이 사용할 공통 프롬프트를 관리하세요</p>
                       </div>
-                      <Button className="bg-gradient-to-r from-[#0EA5E9] to-[#8B5CF6] hover:opacity-90 text-white">
+                      <Button
+                        onClick={() => openInstructionDialog()}
+                        className="bg-[#4318FF] hover:bg-[#3311CC] text-white"
+                      >
                         <Plus className="w-4 h-4 mr-2" />
                         프롬프트 추가
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {[
-                        { 
-                          title: '마케팅 카피 생성', 
-                          description: '제품이나 서비스를 홍보하는 마케팅 카피를 생성합니다',
-                          uses: 47,
-                          category: '마케팅'
-                        },
-                        { 
-                          title: '코드 리뷰', 
-                          description: '작성된 코드를 검토하고 개선점을 제안합니다',
-                          uses: 32,
-                          category: '개발'
-                        },
-                        { 
-                          title: '회의록 요약', 
-                          description: '긴 회의 내용을 핵심 포인트로 요약합니다',
-                          uses: 28,
-                          category: '생산성'
-                        },
-                        { 
-                          title: '이메일 작성', 
-                          description: '전문적인 비즈니스 이메일을 작성합니다',
-                          uses: 56,
-                          category: '커뮤니케이션'
-                        },
-                        { 
-                          title: '아이디어 브레인스토밍', 
-                          description: '창의적인 아이디어를 생성하고 발전시킵니다',
-                          uses: 41,
-                          category: '기획'
-                        },
-                        { 
-                          title: 'SEO 콘텐츠', 
-                          description: '검색 엔진 최적화된 콘텐츠를 작성합니다',
-                          uses: 23,
-                          category: '마케팅'
-                        },
-                      ].map((prompt, idx) => (
-                        <Card key={idx} className="p-5 border-[#E9EDF7] hover:shadow-md transition-shadow cursor-pointer">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1">
-                              <h4 className="text-[15px] font-semibold text-[#1b2559] mb-1">{prompt.title}</h4>
-                              <p className="text-[13px] text-[#718096]">{prompt.description}</p>
+                    <div className="grid grid-cols-1 gap-4">
+                      {prompts.length === 0 ? (
+                        <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                          <p className="text-gray-500">등록된 프롬프트가 없습니다.</p>
+                          <Button variant="link" onClick={() => openInstructionDialog()}>
+                            첫 번째 프롬프트 만들기
+                          </Button>
+                        </div>
+                      ) : (
+                        prompts.map((prompt) => (
+                          <Card key={prompt.id} className="p-6 border-[#E9EDF7]">
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <h4 className="text-[16px] font-bold text-[#1b2559] mb-1">{prompt.title}</h4>
+                                <p className="text-[12px] text-[#A3AED0]">
+                                  Last updated: {new Date(prompt.updated_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openInstructionDialog(prompt)}
+                                >
+                                  수정하기
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-500 hover:text-red-600"
+                                  onClick={() => handleDeleteInstruction(prompt.id)}
+                                >
+                                  삭제
+                                </Button>
+                              </div>
                             </div>
-                            <Badge variant="outline" className="border-[#0EA5E9] text-[#0EA5E9] ml-2">
-                              {prompt.category}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center justify-between text-[12px] text-[#718096]">
-                            <span>{prompt.uses}회 사용</span>
-                            <Button variant="ghost" size="sm" className="h-7 text-[#0EA5E9] hover:text-[#0EA5E9] hover:bg-[#f0f9ff]">
-                              사용하기
-                            </Button>
-                          </div>
-                        </Card>
-                      ))}
+                            <div className="bg-gray-50 p-4 rounded-md text-[14px] text-[#2D3748] whitespace-pre-wrap font-mono leading-relaxed">
+                              {prompt.instruction}
+                            </div>
+                          </Card>
+                        ))
+                      )}
                     </div>
                   </TabsContent>
 
@@ -825,7 +956,6 @@ export default function TeamManagement({
           </div>
           <DialogFooter>
             <Button
-              variant="outline"
               onClick={() => {
                 setIsCreateFolderDialogOpen(false);
                 setNewFolderName('');
@@ -907,6 +1037,15 @@ export default function TeamManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Group Instruction Edit Dialog */}
+      <GroupInstructionEditDialog
+        open={isInstructionDialogOpen}
+        onOpenChange={setIsInstructionDialogOpen}
+        initialTitle={editingInstruction?.title || ''}
+        initialContent={editingInstruction?.instruction || ''}
+        onSave={handleSaveInstruction}
+      />
     </div>
   );
 }
