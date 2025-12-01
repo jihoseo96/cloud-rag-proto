@@ -1,17 +1,24 @@
 from typing import List, Dict, Any, Optional
 
+# In-memory storage for MVP. In production, use DB.
+RISK_KEYWORDS = ["guarantee", "always", "never", "100%", "unlimited"]
+
+def get_risk_keywords() -> List[str]:
+    return RISK_KEYWORDS
+
+def add_risk_keyword(keyword: str):
+    if keyword not in RISK_KEYWORDS:
+        RISK_KEYWORDS.append(keyword)
+
+def remove_risk_keyword(keyword: str):
+    if keyword in RISK_KEYWORDS:
+        RISK_KEYWORDS.remove(keyword)
+
 def assess_risk(text: str, facts: Dict[str, Any]) -> Dict[str, Any]:
     """
     Assess the risk level of a text based on provided facts.
-    Returns a dictionary with 'risk_level' (SAFE/HIGH) and 'reason'.
-    
-    For MVP, this is a placeholder or simple keyword check.
-    In production, this would call an LLM.
     """
-    # Simple keyword-based risk check for MVP
-    risk_keywords = ["guarantee", "always", "never", "100%", "unlimited"]
-    
-    found_risks = [kw for kw in risk_keywords if kw in text.lower()]
+    found_risks = [kw for kw in RISK_KEYWORDS if kw in text.lower()]
     
     if found_risks:
         return {

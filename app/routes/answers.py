@@ -111,7 +111,40 @@ def list_answers(
             "created_at": c.created_at,
             "variants": c.variants,
             "anchors": c.anchors,
-            "facts": c.facts
+            "facts": c.facts,
+            "past_proposals": c.past_proposals
         }
         for c in cards
     ]
+
+class UsageBody(BaseModel):
+    project_id: str
+    doc_name: str
+    page: int
+    date: str # ISO format
+
+@router.post("/{answer_id}/usage")
+def record_usage(answer_id: UUID, body: UsageBody, db: Session = Depends(get_db)):
+    """
+    Record that an answer card was used in a proposal.
+    """
+    card = db.get(AnswerCard, answer_id)
+    if not card:
+        raise HTTPException(404, "AnswerCard not found")
+    
+    current_history = card.past_proposals or []
+    # Append new usage
+    new_record = {
+        "project_id": body.project_id,
+        "doc_name": body.doc_name,
+        "page": body.page,
+        "date": body.date
+    }
+    # In a real app, we might want to avoid duplicates or limit size
+    current_history.append(new_record)
+    
+    # SQLAlchemy needs explicit flag for JSON mutation sometimes, or re-assignment
+    card.past_proposals = list(current_history)
+    db.commit()
+    
+    return {"status": "success", "usage_count": len(card.past_proposals)}

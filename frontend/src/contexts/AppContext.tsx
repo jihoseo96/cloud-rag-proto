@@ -1,485 +1,537 @@
 /**
- * AppContext
+ * AppContext - Enterprise RFP OS
  * 
- * 애플리케이션의 전역 상태를 관리하는 Context
- * - Workspace, Team, Chat, Message 상태
- * - Group Instructions, Standard Answers
+ * Global state management for RFP knowledge operating system
+ * v2025.11.28
  */
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import {
-  Team,
+  Project,
+  AnswerCard,
+  RFPRequirement,
+  DocumentUpload,
+  Conflict,
+  ProposalTemplate,
+  Proposal,
+  AuditLog,
+  ProjectAnalytics,
+  DashboardMetrics,
   Workspace,
-  Chat,
-  Message,
-  GroupInstruction,
-  StandardAnswer,
 } from '../types';
-import imgElipse6 from 'figma:asset/b940caf9f3a52bcc9317c793ebc094db911b237b.png';
-import {
-  listGroups,
-  listChats,
-  createChatApi,
-  Group as ApiGroup,
-  Chat as ApiChat,
-  query,
-} from '../lib/api';
-
-interface ChatMessages {
-  [chatId: string]: Message[];
-}
-
-/**
- * 초기 데이터 정의
- * 실제 서비스에서는 API 호출을 통해 데이터를 가져오게 됩니다.
- */
-
-// 초기 Workspaces
-const initialWorkspaces: Workspace[] = [
-  {
-    id: '1',
-    name: 'Personal Workspace',
-    type: 'personal',
-  },
-  {
-    id: '2',
-    name: 'Team Workspace',
-    type: 'organization',
-  },
-];
-
-// 초기 Teams
-const initialTeams: Team[] = [
-  {
-    id: '1',
-    name: 'Personal',
-    memberCount: 1,
-    workspaceId: '1',
-  },
-  {
-    id: '2',
-    name: 'Team Adela',
-    memberCount: 4,
-    workspaceId: '2',
-  },
-];
-
-// 초기 Chats
-const initialChats: Chat[] = [
-  {
-    id: '1',
-    title: '첫 번째 대화',
-    preview: '안녕하세요, 무엇을 도와드릴까요?',
-    timestamp: '방금 전',
-    teamId: null,
-    lastUpdated: Date.now(),
-  },
-  {
-    id: '2',
-    title: 'React 학습 관련 질문',
-    preview: 'useState와 useEffect의 차이점은...',
-    timestamp: '2시간 전',
-    teamId: null,
-    lastUpdated: Date.now() - 7200000,
-  },
-  {
-    id: '3',
-    title: 'TypeScript 타입 정의',
-    preview: '제네릭 타입을 어떻게 사용하나요...',
-    timestamp: '어제',
-    teamId: null,
-    lastUpdated: Date.now() - 86400000,
-  },
-
-  // 팀 채팅 예시
-  {
-    id: '4',
-    title: '마케팅 캠페인 기획',
-    preview: 'Q1 마케팅 전략에 대해서...',
-    timestamp: '1시간 전',
-    teamId: '2',
-    lastUpdated: Date.now() - 3600000,
-  },
-  {
-    id: '5',
-    title: 'SNS 콘텐츠 아이디어',
-    preview: '인스타그램 콘텐츠...',
-    timestamp: '3시간 전',
-    teamId: '2',
-    lastUpdated: Date.now() - 10800000,
-  },
-];
-
-// 초기 Prompts (Group Instructions)
-const initialPrompts: GroupInstruction[] = [
-  {
-    id: '1',
-    teamId: '1',
-    title: '기본 응답 스타일',
-    content:
-      '모든 답변은 친절하고 명확하게, 단계별로 설명해 주세요.\n가능하다면 예시도 함께 제공해 주세요.',
-  },
-  {
-    id: '2',
-    teamId: '2',
-    title: '마케팅 팀용 프롬프트',
-    content:
-      '디지털 마케팅 전략, 캠페인 기획, 콘텐츠 아이디어에 특화된 답변을 제공합니다.',
-  },
-];
-
-// 초기 Chat Messages
-const mockMessages: Message[] = [
-  {
-    id: '1',
-    role: 'user',
-    content: '안녕하세요! 오늘의 작업을 정리해 주세요.',
-    timestamp: '오전 10:00',
-  },
-  {
-    id: '2',
-    role: 'assistant',
-    content:
-      '안녕하세요! 오늘의 작업은 다음과 같습니다:\n1. UI 컴포넌트 구조 정리\n2. AppContext 상태 관리 개선\n3. API 연동 작업\n\n각 작업에 대해 무엇을 먼저 도와드릴까요?',
-    timestamp: '오전 10:01',
-  },
-  {
-    id: '3',
-    role: 'user',
-    content: 'AppContext 구조를 이해하고 싶어요.',
-    timestamp: '오전 10:02',
-  },
-  {
-    id: '4',
-    role: 'assistant',
-    content:
-      'AppContext는 애플리케이션 전역 상태를 관리하는 역할을 합니다. 주요 상태는 다음과 같습니다:\n- Workspace & Team 정보\n- Chat & Message 상태\n- Group Instructions & Standard Answers\n\n이 중 어떤 부분이 가장 궁금하신가요?',
-    timestamp: '오전 10:03',
-  },
-];
-
-const welcomeMessages: Message[] = [
-  {
-    id: Date.now().toString(),
-    role: 'assistant',
-    content: '새로운 대화입니다. 무엇을 도와드릴까요?',
-    timestamp: new Date().toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-  },
-];
-
-/**
- * AppContext 타입 정의
- */
 
 interface AppContextType {
-  // Workspace & Team
-  workspaces: Workspace[];
-  teams: Team[];
-  setTeams: React.Dispatch<React.SetStateAction<Team[]>>;
-
-  // Chat & Messages
-  chats: Chat[];
-  setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
-  chatMessages: ChatMessages;
-  setChatMessages: React.Dispatch<React.SetStateAction<ChatMessages>>;
-  selectedChat: string;
-  setSelectedChat: React.Dispatch<React.SetStateAction<string>>;
-  selectedTeam: string | null;
-  setSelectedTeam: React.Dispatch<React.SetStateAction<string | null>>;
-
-  // Group Instructions & Standard Answers
-  prompts: GroupInstruction[];
-  standardAnswers: StandardAnswer[];
-  setStandardAnswers: React.Dispatch<React.SetStateAction<StandardAnswer[]>>;
-
+  // Projects
+  projects: Project[];
+  selectedProject: Project | null;
+  setSelectedProject: (project: Project | null) => void;
+  createProject: (project: Omit<Project, 'id' | 'createdAt'>) => void;
+  updateProject: (id: string, updates: Partial<Project>) => void;
+  
+  // Answer Cards
+  answerCards: AnswerCard[];
+  getCardsByProject: (projectId: string) => AnswerCard[];
+  createAnswerCard: (card: Omit<AnswerCard, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateAnswerCard: (id: string, updates: Partial<AnswerCard>) => void;
+  
+  // Requirements
+  requirements: RFPRequirement[];
+  getRequirementsByProject: (projectId: string) => RFPRequirement[];
+  
+  // Documents
+  documents: DocumentUpload[];
+  uploadDocument: (doc: Omit<DocumentUpload, 'id' | 'uploadedAt'>) => void;
+  
+  // Conflicts
+  conflicts: Conflict[];
+  getConflictsByProject: (projectId: string) => Conflict[];
+  resolveConflict: (id: string, resolution: string, userId: string) => void;
+  
+  // Proposals
+  proposals: Proposal[];
+  templates: ProposalTemplate[];
+  
+  // Analytics
+  dashboardMetrics: DashboardMetrics;
+  getProjectAnalytics: (projectId: string) => ProjectAnalytics | null;
+  
+  // Audit
+  auditLogs: AuditLog[];
+  addAuditLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void;
+  
+  // Workspace
+  currentWorkspace: Workspace;
+  
   // UI State
-  selectedModel: string;
-  setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
-
-  // Helper Functions
-  createNewChat: () => void;
-  handleCreateTeamChat: (teamId: string) => void;
-  handleCreateTeam: (name: string) => void;
-  handleDeleteTeam: (teamId: string) => void;
-  handleChatClick: (chatId: string, teamId: string | null) => void;
-  handleSendMessage: (inputValue: string) => Promise<void>;
-
-  // User info
-  userAvatar: string;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
 }
-
-/**
- * Context 생성
- */
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-/**
- * AppProvider 컴포넌트
- */
+// ============================================
+// Mock Data
+// ============================================
+
+const mockWorkspace: Workspace = {
+  id: 'ws-1',
+  name: 'Personal Workspace',
+  type: 'personal',
+  createdAt: new Date('2024-11-01'),
+};
+
+const mockProjects: Project[] = [
+  {
+    id: 'proj-1',
+    workspace: 'personal',
+    groupId: 'group-1',
+    name: '2024 국방부 RFP - 보안시스템 구축',
+    industry: 'defense',
+    rfpType: 'technical',
+    evaluationCriteria: {
+      technical: 40,
+      price: 30,
+      management: 20,
+      social: 10,
+    },
+    requiredDocuments: ['사업자등록증', '기술제안서', '견적서'],
+    prohibitedPhrases: ['100% 보장', '절대', '최고'],
+    createdAt: new Date('2024-11-15'),
+    ownerId: 'user-1',
+    status: 'active',
+    dueDate: new Date('2024-12-31'),
+    complianceCoverage: 72,
+  },
+  {
+    id: 'proj-2',
+    workspace: 'personal',
+    groupId: 'group-1',
+    name: '서울시 스마트시티 플랫폼 제안',
+    industry: 'public',
+    rfpType: 'technical',
+    evaluationCriteria: {},
+    requiredDocuments: [],
+    prohibitedPhrases: [],
+    createdAt: new Date('2024-11-20'),
+    ownerId: 'user-1',
+    status: 'active',
+    complianceCoverage: 45,
+  },
+  {
+    id: 'proj-3',
+    workspace: 'personal',
+    groupId: 'group-1',
+    name: '금융권 클라우드 전환 컨설팅',
+    industry: 'finance',
+    rfpType: 'consulting',
+    evaluationCriteria: {},
+    requiredDocuments: [],
+    prohibitedPhrases: [],
+    createdAt: new Date('2024-11-10'),
+    ownerId: 'user-1',
+    status: 'completed',
+    complianceCoverage: 98,
+  },
+];
+
+const mockAnswerCards: AnswerCard[] = [
+  {
+    id: 'card-1',
+    projectId: 'proj-1',
+    topic: '보안 인증 현황',
+    description: 'ISO27001, ISMS-P 인증 보유',
+    anchors: [
+      {
+        contentHash: 'sha256-abc123',
+        textSnippet: '당사는 ISO27001 및 ISMS-P 인증을 보유하고 있습니다.',
+        anchorConfidence: 0.95,
+        docId: 'doc-1',
+        sectionPath: '3.1 보안 인증',
+        page: 5,
+        bbox: [100, 200, 500, 350],
+        anchorType: 'semantic',
+      },
+    ],
+    facts: {
+      iso27001: true,
+      ismsP: true,
+      certDate: '2023-01-15',
+      validUntil: '2026-01-14',
+    },
+    variants: [
+      {
+        id: 'var-1',
+        content: '당사는 정보보호 관리체계 인증(ISMS-P)과 국제 정보보안 인증(ISO27001)을 보유하고 있으며, 정기적인 갱신을 통해 최신 보안 기준을 준수하고 있습니다.',
+        context: 'public-sector',
+        status: 'APPROVED',
+        riskLevel: 'SAFE',
+        usageCount: 15,
+        approvedBy: 'manager@company.com',
+        approvedAt: new Date('2024-11-16'),
+        createdAt: new Date('2024-11-15'),
+        createdBy: 'user-1',
+      },
+      {
+        id: 'var-2',
+        content: '우리 회사는 최고 수준의 보안 인증을 보유하고 있습니다!',
+        context: 'sales-pitch',
+        status: 'REJECTED',
+        riskLevel: 'HIGH',
+        usageCount: 0,
+        rejectedBy: 'manager@company.com',
+        rejectedAt: new Date('2024-11-16'),
+        createdAt: new Date('2024-11-15'),
+        createdBy: 'user-2',
+      },
+    ],
+    tags: ['보안', '인증', 'ISO27001', 'ISMS-P'],
+    category: 'security',
+    createdAt: new Date('2024-11-15'),
+    updatedAt: new Date('2024-11-16'),
+    overallConfidence: 0.95,
+  },
+  {
+    id: 'card-2',
+    projectId: 'proj-1',
+    topic: 'SLA 및 운영 가용성',
+    description: '99.9% 가용성 보장, 24/7 모니터링',
+    anchors: [
+      {
+        contentHash: 'sha256-def456',
+        textSnippet: '연간 99.9% 가용성을 제공하며...',
+        anchorConfidence: 0.88,
+        docId: 'doc-2',
+        sectionPath: '4.2 SLA',
+        page: 12,
+        anchorType: 'semantic',
+      },
+    ],
+    facts: {
+      sla: 99.9,
+      monitoring: '24/7',
+      responseTime: '15min',
+    },
+    variants: [
+      {
+        id: 'var-3',
+        content: '당사는 연간 99.9% 가용성을 보장하며, 24시간 365일 모니터링 체계를 통해 장애 발생 시 15분 이내 대응합니다.',
+        context: 'public-sector',
+        status: 'APPROVED',
+        riskLevel: 'SAFE',
+        usageCount: 8,
+        approvedBy: 'manager@company.com',
+        approvedAt: new Date('2024-11-17'),
+        createdAt: new Date('2024-11-17'),
+        createdBy: 'user-1',
+      },
+    ],
+    tags: ['SLA', '가용성', '모니터링'],
+    category: 'operations',
+    createdAt: new Date('2024-11-17'),
+    updatedAt: new Date('2024-11-17'),
+    overallConfidence: 0.88,
+  },
+];
+
+const mockRequirements: RFPRequirement[] = [
+  {
+    id: 'req-1',
+    projectId: 'proj-1',
+    requirementText: '정보보호 관리체계(ISMS-P) 인증 보유 필수',
+    requirementType: 'security',
+    complianceLevel: 'YES',
+    linkedAnswerCards: ['card-1'],
+    anchorConfidence: 0.95,
+    priority: 'high',
+    section: '가. 사업자 자격요건',
+  },
+  {
+    id: 'req-2',
+    projectId: 'proj-1',
+    requirementText: '시스템 가용성 99.5% 이상 보장',
+    requirementType: 'technical',
+    complianceLevel: 'YES',
+    linkedAnswerCards: ['card-2'],
+    anchorConfidence: 0.88,
+    priority: 'high',
+    section: '나. 기술 요구사항',
+  },
+  {
+    id: 'req-3',
+    projectId: 'proj-1',
+    requirementText: '24시간 장애 대응 체계 구축',
+    requirementType: 'operations',
+    complianceLevel: 'PARTIAL',
+    linkedAnswerCards: ['card-2'],
+    anchorConfidence: 0.7,
+    priority: 'medium',
+    section: '나. 기술 요구사항',
+  },
+  {
+    id: 'req-4',
+    projectId: 'proj-1',
+    requirementText: '개인정보보호 관련 법령 준수',
+    requirementType: 'compliance',
+    complianceLevel: 'UNKNOWN',
+    linkedAnswerCards: [],
+    anchorConfidence: 0,
+    priority: 'high',
+    section: '다. 법적 요구사항',
+  },
+];
+
+const mockDocuments: DocumentUpload[] = [
+  {
+    id: 'doc-1',
+    projectId: 'proj-1',
+    fileName: '회사소개서_2024.pdf',
+    fileSize: 2458624,
+    fileType: 'application/pdf',
+    uploadedAt: new Date('2024-11-15T10:30:00'),
+    uploadedBy: 'user-1',
+    status: 'completed',
+    processingSteps: [
+      { step: '파일 업로드', status: 'completed', progress: 100, completedAt: new Date('2024-11-15T10:30:10') },
+      { step: '텍스트 추출', status: 'completed', progress: 100, completedAt: new Date('2024-11-15T10:30:25') },
+      { step: '섹션 분석', status: 'completed', progress: 100, completedAt: new Date('2024-11-15T10:30:40') },
+      { step: 'AnswerCard 생성', status: 'completed', progress: 100, completedAt: new Date('2024-11-15T10:31:00') },
+    ],
+    s3Url: 'https://s3.amazonaws.com/bucket/doc-1.pdf',
+    generatedCards: ['card-1'],
+  },
+  {
+    id: 'doc-2',
+    projectId: 'proj-1',
+    fileName: 'SLA_운영계획서.hwp',
+    fileSize: 1234567,
+    fileType: 'application/x-hwp',
+    uploadedAt: new Date('2024-11-17T14:20:00'),
+    uploadedBy: 'user-1',
+    status: 'completed',
+    processingSteps: [
+      { step: '파일 업로드', status: 'completed', progress: 100 },
+      { step: '텍스트 추출', status: 'completed', progress: 100 },
+      { step: '섹션 분석', status: 'completed', progress: 100 },
+      { step: 'AnswerCard 생성', status: 'completed', progress: 100 },
+    ],
+    generatedCards: ['card-2'],
+  },
+];
+
+const mockConflicts: Conflict[] = [
+  {
+    id: 'conflict-1',
+    projectId: 'proj-1',
+    type: 'duplicate',
+    severity: 'medium',
+    entities: [
+      { type: 'answer-card', id: 'card-1', label: '보안 인증 현황 (회사소개서)', confidence: 0.95, date: new Date('2024-11-15') },
+      { type: 'answer-card', id: 'card-x', label: '보안 인증 현황 (기술제안서)', confidence: 0.87, date: new Date('2024-11-18') },
+    ],
+    suggestedResolution: 'keep-newest',
+    status: 'pending',
+  },
+];
+
+const mockTemplates: ProposalTemplate[] = [
+  {
+    id: 'template-1',
+    name: '공공기관 기술제안서 (국방)',
+    industry: 'defense',
+    rfpType: 'technical',
+    sectionOrder: [
+      { id: 's1', title: '1. 회사 개요', description: '회사 소개 및 연혁', recommendedCards: [], order: 1, isRequired: true },
+      { id: 's2', title: '2. 보안 및 인증', description: '보안 인증 현황', recommendedCards: ['보안 인증'], order: 2, isRequired: true },
+      { id: 's3', title: '3. 기술 역량', description: '기술 스택 및 경험', recommendedCards: [], order: 3, isRequired: true },
+      { id: 's4', title: '4. 사업 수행 계획', description: 'SLA, 운영 계획', recommendedCards: ['SLA'], order: 4, isRequired: true },
+      { id: 's5', title: '5. 유지보수 계획', description: '유지보수 및 지원', recommendedCards: [], order: 5, isRequired: false },
+    ],
+    createdAt: new Date('2024-01-01'),
+    isDefault: true,
+  },
+];
+
+const mockAuditLogs: AuditLog[] = [
+  {
+    id: 'audit-1',
+    entityType: 'variant',
+    entityId: 'var-1',
+    action: 'approve',
+    userId: 'user-manager',
+    userEmail: 'manager@company.com',
+    timestamp: new Date('2024-11-16T09:30:00'),
+    metadata: { cardId: 'card-1', topic: '보안 인증 현황' },
+  },
+  {
+    id: 'audit-2',
+    entityType: 'variant',
+    entityId: 'var-2',
+    action: 'reject',
+    userId: 'user-manager',
+    userEmail: 'manager@company.com',
+    timestamp: new Date('2024-11-16T09:32:00'),
+    metadata: { cardId: 'card-1', reason: 'High Risk - 과장된 표현' },
+  },
+  {
+    id: 'audit-3',
+    entityType: 'upload',
+    entityId: 'doc-1',
+    action: 'upload',
+    userId: 'user-1',
+    userEmail: 'user@company.com',
+    timestamp: new Date('2024-11-15T10:30:00'),
+    metadata: { fileName: '회사소개서_2024.pdf', fileSize: 2458624 },
+  },
+];
+
+// ============================================
+// Provider Component
+// ============================================
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [workspaces] = useState<Workspace[]>(initialWorkspaces);
-  const [teams, setTeams] = useState<Team[]>(initialTeams);
-  const [chats, setChats] = useState<Chat[]>(initialChats);
-  const [prompts] = useState<GroupInstruction[]>(initialPrompts);
-  const [chatMessages, setChatMessages] = useState<ChatMessages>({
-    '1': mockMessages,
-  });
-  const [selectedChat, setSelectedChat] = useState<string>('1');
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [standardAnswers, setStandardAnswers] = useState<StandardAnswer[]>([]);
-  const [selectedModel, setSelectedModel] = useState('ChatGPT-5');
+  const [projects, setProjects] = useState<Project[]>(mockProjects);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(mockProjects[0]);
+  const [answerCards, setAnswerCards] = useState<AnswerCard[]>(mockAnswerCards);
+  const [requirements, setRequirements] = useState<RFPRequirement[]>(mockRequirements);
+  const [documents, setDocuments] = useState<DocumentUpload[]>(mockDocuments);
+  const [conflicts, setConflicts] = useState<Conflict[]>(mockConflicts);
+  const [proposals] = useState<Proposal[]>([]);
+  const [templates] = useState<ProposalTemplate[]>(mockTemplates);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(mockAuditLogs);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  /**
-   * 🔄 초기 로딩 시 백엔드에서 실제 팀/채팅 불러오기
-   *  - /groups → 팀 목록
-   *  - /chats  → 채팅 목록
-   */
-  useEffect(() => {
-    async function loadInitial() {
-      try {
-        const [groupsRes, chatsRes] = await Promise.all([
-          listGroups(),
-          listChats(),
-        ]);
-
-        const mappedTeams: Team[] = groupsRes.map((g: ApiGroup) => ({
-          id: g.id,
-          name: g.name,
-          memberCount: 1, // TODO: 백엔드에서 인원수 내려주면 교체
-          workspaceId: g.workspace ?? 'personal',
-        }));
-
-        setTeams(mappedTeams);
-
-        const mappedChats: Chat[] = chatsRes.map((c: ApiChat) => ({
-          id: c.id,
-          title: c.title || '새 대화',
-          preview: '',
-          timestamp: '',
-          teamId: c.group_id,
-          lastUpdated: c.last_updated
-            ? new Date(c.last_updated).getTime()
-            : Date.now(),
-        }));
-
-        setChats(mappedChats);
-      } catch (e) {
-        console.error('초기 팀/채팅 로딩 실패', e);
-        // 실패하면 mock 데이터를 유지
-      }
-    }
-
-    loadInitial();
-  }, []);
-
-  // Generate chat title from first user message
-  const generateChatTitle = (content: string): string => {
-    const summary = content.slice(0, 30).trim();
-    return summary.length < content.length ? `${summary}...` : summary;
-  };
-
-  // Handle chat click
-  const handleChatClick = (chatId: string, teamId: string | null) => {
-    setSelectedChat(chatId);
-    setSelectedTeam(teamId);
-  };
-
-  // 🔥 새 개인 채팅 생성 → /chats POST 연동
-  const createNewChat = () => {
-    const targetTeamId = selectedTeam || (teams[0]?.id ?? null);
-
-    if (!targetTeamId) {
-      console.warn('팀이 없어 새 채팅을 만들 수 없습니다.');
-      return;
-    }
-
-    createChatApi({
-      group_id: targetTeamId,
-      title: '새 대화',
-    })
-      .then((created) => {
-        const newChat: Chat = {
-          id: created.id,
-          title: created.title || '새 대화',
-          preview: '새로운 대화를 시작하세요',
-          timestamp: '방금 전',
-          teamId: created.group_id,
-          lastUpdated: created.last_updated
-            ? new Date(created.last_updated).getTime()
-            : Date.now(),
-        };
-
-        setChats((prev) => [newChat, ...prev]);
-        setChatMessages((prev) => ({
-          ...prev,
-          [newChat.id]: welcomeMessages,
-        }));
-        setSelectedChat(newChat.id);
-        setSelectedTeam(targetTeamId);
-      })
-      .catch((e) => {
-        console.error('채팅 생성 실패', e);
-      });
-  };
-
-  // 팀 특정 채팅 생성 (현재는 로컬 상태만 / API 연동은 나중에 확장)
-  const handleCreateTeamChat = (teamId: string) => {
-    const now = Date.now();
-    const newChatId = now.toString();
-    const newChat: Chat = {
-      id: newChatId,
-      title: '새 대화',
-      preview: '새로운 대화를 시작하세요',
-      timestamp: '방금',
-      teamId: teamId,
-      lastUpdated: now,
+  const createProject = (project: Omit<Project, 'id' | 'createdAt'>) => {
+    const newProject: Project = {
+      ...project,
+      id: `proj-${Date.now()}`,
+      createdAt: new Date(),
     };
-    setChats((prev) => [newChat, ...prev]);
-    setChatMessages((prev) => ({ ...prev, [newChatId]: welcomeMessages }));
-    setSelectedChat(newChatId);
-    setSelectedTeam(teamId);
+    setProjects(prev => [newProject, ...prev]);
+    setSelectedProject(newProject);
   };
 
-  // 팀 생성 (MVP에서는 로컬 상태)
-  const handleCreateTeam = (name: string) => {
-    const newTeam: Team = {
-      id: Date.now().toString(),
-      name,
-      memberCount: 1,
-      workspaceId: '1',
-    };
-    setTeams((prev) => [...prev, newTeam]);
-  };
-
-  // 팀 삭제 (MVP에서는 로컬 상태)
-  const handleDeleteTeam = (teamId: string) => {
-    setTeams((prev) => prev.filter((t) => t.id !== teamId));
-    setChats((prev) => prev.filter((c) => c.teamId !== teamId));
-    if (selectedTeam === teamId) {
-      setSelectedTeam(null);
-      setSelectedChat(chats.find((c) => c.teamId === null)?.id || '1');
+  const updateProject = (id: string, updates: Partial<Project>) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    if (selectedProject?.id === id) {
+      setSelectedProject(prev => prev ? { ...prev, ...updates } : null);
     }
   };
 
-  // 메시지 전송 처리 → /query 실제 호출
-  const handleSendMessage = async (inputValue: string) => {
-    if (!inputValue.trim()) return;
-    if (!selectedChat) return;
-
-    const now = new Date();
-    const timestamp = now.toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    // 1) 유저 메시지 추가
-    const userMessage: Message = {
-      id: now.getTime().toString(),
-      role: 'user',
-      content: inputValue,
-      timestamp,
-    };
-
-    setChatMessages((prev) => ({
-      ...prev,
-      [selectedChat]: [...(prev[selectedChat] || []), userMessage],
-    }));
-
-    // 2) 채팅 메타 정보 업데이트 (프리뷰/제목/시간)
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === selectedChat
-          ? {
-            ...chat,
-            preview: inputValue.slice(0, 30) + '...',
-            title:
-              chat.title === '첫 번째 대화'
-                ? generateChatTitle(inputValue)
-                : chat.title,
-            timestamp: '방금 전',
-            lastUpdated: now.getTime(),
-          }
-          : chat,
-      ),
-    );
-
-    // 3) 백엔드 /query 호출
-    try {
-      const res = await query({
-        q: inputValue,
-        groupId: selectedTeam ?? undefined,
-        preferTeamAnswer: true,
-      });
-
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: res.answer,
-        timestamp: new Date().toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-      };
-
-      setChatMessages((prev) => ({
-        ...prev,
-        [selectedChat]: [...(prev[selectedChat] || []), aiMessage],
-      }));
-    } catch (error) {
-      console.error('Failed to query backend', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content:
-          '죄송합니다. 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-        timestamp: new Date().toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-      };
-      setChatMessages((prev) => ({
-        ...prev,
-        [selectedChat]: [...(prev[selectedChat] || []), errorMessage],
-      }));
-    }
+  const getCardsByProject = (projectId: string) => {
+    return answerCards.filter(card => card.projectId === projectId);
   };
 
+  const createAnswerCard = (card: Omit<AnswerCard, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newCard: AnswerCard = {
+      ...card,
+      id: `card-${Date.now()}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    setAnswerCards(prev => [...prev, newCard]);
+  };
+
+  const updateAnswerCard = (id: string, updates: Partial<AnswerCard>) => {
+    setAnswerCards(prev => prev.map(c => 
+      c.id === id ? { ...c, ...updates, updatedAt: new Date() } : c
+    ));
+  };
+
+  const getRequirementsByProject = (projectId: string) => {
+    return requirements.filter(req => req.projectId === projectId);
+  };
+
+  const uploadDocument = (doc: Omit<DocumentUpload, 'id' | 'uploadedAt'>) => {
+    const newDoc: DocumentUpload = {
+      ...doc,
+      id: `doc-${Date.now()}`,
+      uploadedAt: new Date(),
+    };
+    setDocuments(prev => [newDoc, ...prev]);
+  };
+
+  const getConflictsByProject = (projectId: string) => {
+    return conflicts.filter(c => c.projectId === projectId);
+  };
+
+  const resolveConflict = (id: string, resolution: string, userId: string) => {
+    setConflicts(prev => prev.map(c => 
+      c.id === id 
+        ? { ...c, status: 'resolved' as const, resolution, resolvedBy: userId, resolvedAt: new Date() }
+        : c
+    ));
+  };
+
+  const addAuditLog = (log: Omit<AuditLog, 'id' | 'timestamp'>) => {
+    const newLog: AuditLog = {
+      ...log,
+      id: `audit-${Date.now()}`,
+      timestamp: new Date(),
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  const getProjectAnalytics = (projectId: string): ProjectAnalytics | null => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return null;
+
+    const projectCards = getCardsByProject(projectId);
+    const projectReqs = getRequirementsByProject(projectId);
+    const projectDocs = documents.filter(d => d.projectId === projectId);
+    const projectConflicts = getConflictsByProject(projectId);
+
+    const allVariants = projectCards.flatMap(c => c.variants);
+    
+    return {
+      projectId,
+      totalDocuments: projectDocs.length,
+      totalAnswerCards: projectCards.length,
+      totalRequirements: projectReqs.length,
+      complianceCoverage: project.complianceCoverage || 0,
+      approvedVariants: allVariants.filter(v => v.status === 'APPROVED').length,
+      pendingVariants: allVariants.filter(v => v.status === 'PENDING').length,
+      rejectedVariants: allVariants.filter(v => v.status === 'REJECTED').length,
+      unresolvedConflicts: projectConflicts.filter(c => c.status === 'pending').length,
+      lastActivity: new Date(),
+    };
+  };
+
+  const dashboardMetrics: DashboardMetrics = {
+    totalProjects: projects.length,
+    activeProjects: projects.filter(p => p.status === 'active').length,
+    completedProjects: projects.filter(p => p.status === 'completed').length,
+    totalAnswerCards: answerCards.length,
+    avgComplianceCoverage: projects.reduce((sum, p) => sum + (p.complianceCoverage || 0), 0) / projects.length,
+    pendingConflicts: conflicts.filter(c => c.status === 'pending').length,
+    recentActivity: auditLogs.slice(0, 10),
+  };
 
   const value: AppContextType = {
-    workspaces,
-    teams,
-    setTeams,
-    chats,
-    setChats,
-    chatMessages,
-    setChatMessages,
-    selectedChat,
-    setSelectedChat,
-    selectedTeam,
-    setSelectedTeam,
-    prompts,
-    standardAnswers,
-    setStandardAnswers,
-    selectedModel,
-    setSelectedModel,
-    createNewChat,
-    handleCreateTeamChat,
-    handleCreateTeam,
-    handleDeleteTeam,
-    handleChatClick,
-    handleSendMessage,
-    userAvatar: imgElipse6,
+    projects,
+    selectedProject,
+    setSelectedProject,
+    createProject,
+    updateProject,
+    answerCards,
+    getCardsByProject,
+    createAnswerCard,
+    updateAnswerCard,
+    requirements,
+    getRequirementsByProject,
+    documents,
+    uploadDocument,
+    conflicts,
+    getConflictsByProject,
+    resolveConflict,
+    proposals,
+    templates,
+    dashboardMetrics,
+    getProjectAnalytics,
+    auditLogs,
+    addAuditLog,
+    currentWorkspace: mockWorkspace,
+    sidebarOpen,
+    setSidebarOpen,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

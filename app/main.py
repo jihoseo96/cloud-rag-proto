@@ -218,9 +218,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # ---------------------------------------------------------
 # 라우터 등록
 # ---------------------------------------------------------
-app.include_router(health_router)
+from app.middleware.audit import AuditLogMiddleware
+
+app.add_middleware(AuditLogMiddleware)
 app.include_router(doc_router)
 app.include_router(query_router)
+from app.routes.admin import router as admin_router
+
+app.include_router(admin_router)
 app.include_router(groups_router)
 app.include_router(answers_router)
 app.include_router(chats_router)

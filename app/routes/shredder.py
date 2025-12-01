@@ -57,3 +57,25 @@ def execute_shredding(body: ShredBody, db: Session = Depends(get_db)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+class PreCalcBody(BaseModel):
+    total_size_bytes: int
+    file_count: int
+
+@router.post("/pre-calculate")
+def pre_calculate_cost(body: PreCalcBody):
+    """
+    Estimate cost based on file size before processing.
+    Heuristic: 1KB ~= 0.5 pages ~= 200 tokens.
+    """
+    # Simple heuristic
+    estimated_tokens = body.total_size_bytes // 5 # Very rough approx
+    estimated_cost = (estimated_tokens / 1000) * 0.02 # $0.02 per 1k tokens (example)
+    estimated_cost_krw = estimated_cost * 1350
+    
+    estimated_time_min = (body.total_size_bytes / 1024 / 1024) * 0.5 # 0.5 min per MB
+    
+    return {
+        "estimated_tokens": estimated_tokens,
+        "estimated_cost_krw": int(estimated_cost_krw),
+        "estimated_time_min": round(estimated_time_min, 1)
+    }

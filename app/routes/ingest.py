@@ -41,3 +41,39 @@ async def upload_and_ingest(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+from pydantic import BaseModel
+
+class ResolveBody(BaseModel):
+    resolution: str # keep_new, keep_old, merge
+    filename: str
+    group_id: Optional[str] = None
+    # In a real app, we'd need the file content again or a temporary ID.
+    # For MVP, we'll assume the client re-uploads the file with the resolution flag,
+    # OR we store the pending upload in a cache.
+    # To keep it stateless and simple for MVP: Client sends file + resolution in a new multipart request.
+
+@router.post("/resolve")
+async def resolve_conflict_upload(
+    resolution: str = Form(...),
+    file: UploadFile = File(...),
+    group_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Resolve a conflict by re-uploading with a resolution strategy.
+    """
+    from app.services.ingest import resolve_conflict
+    
+    try:
+        content = await file.read()
+        result = resolve_conflict(
+            db=db,
+            resolution=resolution,
+            file_bytes=content,
+            filename=file.filename,
+            workspace=WORKSPACE,
+            group_id=group_id
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Resolution failed: {str(e)}")

@@ -208,111 +208,194 @@ app/
 ----------------------------------------------------------------    
 
 Section 3. UI/UX 디자인 스펙 (User Interface Specifications)
-문맥(Context): 이 섹션은 사용자가 경험할 화면과 인터랙션의 기준입니다. Figma/프론트엔드 작업 시 이 기준을 따릅니다.
+
+문맥(Context): 이 섹션은 사용자가 경험할 화면과 인터랙션의 기준입니다. **"편집 도구(Editor)"가 아닌 "분석 및 자산화 도구(Analyzer & Asset Manager)"**로서의 정체성을 확립합니다.
 
 3-1. 디자인 철학 (Design Philosophy)
-High-Density Professionalism: 여백이 많은 B2C 스타일을 지양합니다. 엑셀이나 IDE처럼 정보 밀도가 높고(Dense) 구조화된 B2B 엔터프라이즈 룩을 지향합니다.
+Sanitized Professionalism (정제된 전문성):
 
-Transparent Control: "로딩 중..." 대신 "문서 3/5 파싱 중...", "충돌 2건 감지됨" 등 시스템의 상태를 투명하게 표시하여 신뢰를 얻습니다.
+복잡한 버튼이 나열된 기존 B2B ERP 스타일을 지양합니다.
 
-Localized for Korea: HWP/PDF의 복잡한 표와 한글(CJK) 폰트의 가독성을 최우선으로 고려한 레이아웃을 사용합니다.
+Google Workspace / Notion과 유사한 White & Light Gray 베이스에 Blue Primary (#0B57D0)를 사용하여 신뢰감과 청결함을 줍니다.
 
-3-2. 정보 구조 (Information Architecture - LNB)
-좌측 네비게이션 바(LNB)는 4가지 핵심 영역으로 구성됩니다.
+Navigator, Not Editor (작성하지 않고 결정한다):
 
-A. 🏠 Global Command Center (메인 대시보드)
+사용자는 이곳에서 문장을 작성하지 않습니다. AI가 찾아낸 것을 **"승인(Approve)"**하거나 **"내보내기(Export)"**할 뿐입니다.
 
-역할: "오늘 당장 처리해야 할 업무"를 보여주는 상황판.
+따라서 UI의 핵심은 Input Field가 아니라 Decision Button (O/X)과 Export Action입니다.
 
-핵심 컴포넌트:
+Trust Visualization (과정의 시각화):
 
-Action Required: 승인 대기 중인 답변, 해결되지 않은 충돌, High Risk 알림.
+"로딩 중..." 스피너 대신, **"3단계 파싱 중...", "유사 답변 검색 중..."**과 같이 AI의 사고 과정을 텍스트와 스텝퍼(Stepper)로 투명하게 보여줍니다.
 
-Project Status: 진행 중인 프로젝트의 D-Day 및 진척률 테이블.
+3-2. 정보 구조 (Information Architecture - App Shell)
+화면은 좌측 고정된 **사이드바(LNB)**와 우측 메인 워크스페이스로 구성됩니다.
 
-Usage Widget: 이번 달 토큰/비용 사용량 그래프.
+A. 좌측 사이드바 (LNB - Gemini Style)
 
-B. 📂 Projects (제안 작업 공간)
+폭: 260px (Collapsible)
 
-역할: RFP 대응을 위한 휘발성 프로젝트 공간.
+배경: #F7F7F8 (Light Gray)
 
-진입 플로우: New Project 클릭 시 Onboarding Wizard(전면 모달) 실행.
+구조:
 
-내부 탭 구조:
+Top (Action):
 
-Overview: 프로젝트 개요 및 할 일.
+[+ New Project] 버튼 (Primary Blue Button). 클릭 시 우측 화면이 'Landing/Upload'로 전환.
 
-Reference Docs: 업로드된 파일 관리 및 재분석 트리거.
+Middle (Context - Scrollable):
 
-Requirements: 파쇄된 요구사항 매트릭스 (O/X 체크).
+Recent Projects 헤더.
 
-Write Proposal: 3단 분할 에디터 (Workbench).
+프로젝트 리스트 (예: 📄 2025_국방광대역_제안, 📄 금융그룹_Cloud_RFP...).
 
-C. 🏛️ Knowledge Hub (전사 지식 자산)
+클릭 시 우측 화면에 해당 프로젝트의 '결과 테이블' 로드.
 
-역할: 프로젝트와 무관한 영구적 지식 저장소.
+Bottom (Management - Fixed):
 
-하위 메뉴:
+Divider (구분선)
 
-Answer Library: 승인된 표준 AnswerCard 목록 (검색/필터).
+🏛️ Knowledge Hub
 
-Source Documents: S3 원본 파일 관리 (버전 관리).
+📚 Answer Library (답변 카드 관리)
 
-D. ⚙️ Admin & Guardrails (관리 및 정책)
+📂 Source Documents (원본 문서 관리)
 
-역할: 보안 정책 및 사용자 권한 제어.
+⚙️ Admin & Team (멤버 초대 및 권한)
 
-핵심 기능: Risk Policy 설정(팩트 허용 오차 등), 금지어 관리, Audit Log 조회.
+👤 User Profile
 
 3-3. 핵심 화면 상세 스펙 (Key Screen Specs)
-1. Project Onboarding Wizard (Guided Control)
+1. Landing & Onboarding (New Project Wizard)
 
-형태: Full-screen Stepper Modal.
+진입: [+ New Project] 클릭 시.
 
-Step 1: 기본 정보 입력.
+레이아웃: 중앙 정렬, 여백이 많은 Clean View.
 
-Step 2: 파일 업로드 (Drag & Drop).
+구성:
 
-Step 3 (핵심): Batch Conflict Resolver.
+Hero Message: "RFP 분석을 시작합니다. 파일을 업로드하세요."
 
-엑셀 형태의 그리드 뷰.
+Drop Zone: 점선 박스, 파일 드래그 앤 드롭 (PDF/HWP/DOCX).
 
-충돌하는 문서(구버전 vs 신버전)를 나열하고 **"Keep Old / Keep New / Merge"**를 라디오 버튼으로 일괄 선택.
+Sample Trigger: "샘플 파일로 분석 결과 미리보기" 텍스트 링크.
 
-Step 4: Cost Approval.
+Interaction (Analysis State):
 
-"요구사항 150개 추출 예상, 비용 약 120원. 진행하시겠습니까?" (승인 버튼).
+파일 업로드 즉시 중앙에 Progress Stepper 등장.
 
-2. Triple-Split Workbench (Write Proposal Tab)
+Step 1: 텍스트 추출 (Extraction)
 
-레이아웃: 화면을 세로 3분할 (Resizable).
+Step 2: 요구사항 파쇄 (Shredding)
 
-Left (20%): Requirements Checklist. RFP 요구사항 목록. 클릭 시 해당 섹션으로 스크롤 이동.
+Step 3: 지식 매칭 (Matching)
 
-Center (50%): Editor. 실제 제안서 작성 공간. 인용된 문장에는 [📄 p.5] 형태의 Source Badge 삽입.
+특이사항: 충돌(Conflict) 발생 시 잠시 멈추고 사용자에게 "버전 선택 모달" 제시.
 
-Right (30%): Context Assistant.
+2. Project Workspace (Result Table)
 
-Top: 커서 위치 기반 추천 AnswerCard 리스트.
+진입: 분석 완료 직후 또는 LNB에서 프로젝트 클릭 시.
 
-Bottom: 추천 답변의 Confidence Score(신뢰도 %) 및 Risk Level 표시.
+레이아웃: Data Grid (Table) 중심. 편집기가 아님.
 
-3. AnswerCard Detail (Evolution View)
+상단 헤더:
 
-컨셉: GitHub의 Commit History와 유사한 타임라인 뷰.
+프로젝트명, D-Day.
 
-헤더: 주제(Topic) 및 핵심 팩트(Fact Sheet).
+Export Group: [Excel], [Word] 아이콘 버튼 (가장 중요).
 
-바디: Variant List Table.
+메인 테이블 (Requirements Matrix):
 
-컬럼: Content Preview | Context | Status | Risk | Usage | Action
+Status: 🟢(완료), 🟡(검토 필요), 🔴(답변 없음).
 
-Status: APPROVED(초록), REJECTED(빨강), CANDIDATE(노랑).
+Requirement: RFP 원문 요구사항 (클릭 시 원문 팝업).
 
-Risk: HIGH인 경우 붉은색 경고 아이콘 표시.
+AI Suggestion: 매칭된 답변 요약 (1~2줄).
 
-푸터: "Used in Projects" (이 답변이 사용된 프로젝트 목록).
+Source: 근거 문서 뱃지 (예: [제안서_v2.pdf, p.45]).
 
+Score: 적합도 % (Progress Bar).
+
+Slide-over Panel (Detail View):
+
+테이블 행(Row) 클릭 시 우측에서 슬라이드 패널 등장.
+
+상세 답변 내용, 전체 텍스트, Alternative Variants(다른 버전 답변) 선택 가능.
+
+[Approve] / [Reject] 버튼으로 상태 변경.
+
+3. Knowledge Hub Manager (Asset Management)
+
+진입: LNB > Knowledge Hub 클릭.
+
+구성 (Tabs):
+
+Tab A: Answer Library
+
+카드형(Grid) 또는 리스트형(List) 뷰.
+
+검색창 (키워드/해시태그).
+
+개별 카드 클릭 시 수정 모달 (답변 내용 편집 및 승인권자 지정).
+
+Tab B: Source Documents
+
+파일 탐색기 스타일.
+
+업로드된 문서 목록, 파싱 상태, 업로드 날짜.
+
+기능: [Re-Parse](재분석), [Delete](삭제).
+
+4. Admin & Team (Settings)
+
+진입: LNB > Admin & Team 클릭.
+
+구성:
+
+Member Management:
+
+초대 필드 (이메일 입력 + [Invite] 버튼).
+
+멤버 리스트 테이블: 이름 | 이메일 | 권한(Role) | 상태.
+
+Role: Admin (설정 가능), Manager (승인 가능), Viewer (보기만 가능).
+
+Policy & Guardrails:
+
+금지어(Blacklist) 관리.
+
+High Risk 키워드 설정.
+
+Usage: 현재 토큰 사용량 및 예상 비용 대시보드.
+
+3-4. 시각적 스타일 가이드 (Visual Style)
+Color Palette:
+
+Primary: Azure Blue #0B57D0 (Action Button, Active State).
+
+Background: Off-White #FFFFFF (Main), #F7F7F8 (Sidebar/Background).
+
+Text: #1F1F1F (Heading), #424242 (Body), #9AA0A6 (Placeholder).
+
+Semantic:
+
+Success (Approved): #0E7A4E (Green)
+
+Warning (Review Needed): #EFB81A (Yellow)
+
+Error/Risk (Rejected): #D0362D (Red)
+
+Typography:
+
+System Font Stack (San Francisco, Segoe UI, Noto Sans KR).
+
+가독성 최우선: 데이터 테이블 내 폰트 사이즈는 13px~14px로 밀도 있게 유지.
+
+Component:
+
+모든 컨테이너는 Border-radius: 8px (부드러운 사각형).
+
+그림자(Shadow)는 최소화하고 Border (#E0E0E0)로 구획 구분.
 ----------------------------------------------------------------
 
 Section 4. 실행 로드맵 및 상태 관리 (Roadmap & Milestones)
@@ -380,9 +463,9 @@ Backend: Knowledge Management
 
 Frontend: Guided Onboarding UX
 
-[ ] Smart Uploader UI: 파일 업로드 시 실시간 분석 상태(Progress) 표시 컴포넌트.
+[x] Smart Uploader UI: 파일 업로드 시 실시간 분석 상태(Progress) 표시 컴포넌트 (`OnboardingWizardPage` 연동 완료).
 
-[ ] Batch Conflict Resolver: 엑셀 스타일의 충돌 해결 테이블 UI 구현 (일괄 적용 기능 포함).
+[x] Batch Conflict Resolver: 엑셀 스타일의 충돌 해결 테이블 UI 구현 (`OnboardingWizardPage` 연동 완료).
 
 [ ] Dashboard Integration: 온보딩 완료 후 대시보드로 자연스럽게 전환되는 흐름.
 
@@ -405,38 +488,137 @@ Backend: RFP Processing
 
 [x] Requirement <-> AnswerCard 매핑 알고리즘
 
+[x] Project & Requirement API: `routes/projects.py` 생성 및 연동.
+
 Frontend: Proposal Editor
 
-[ ] Requirement Mapper UI: RFP 요구사항과 매칭된 AnswerCard를 보여주는 뷰.
+[x] Requirement Mapper UI: RFP 요구사항과 매칭된 AnswerCard를 보여주는 뷰 (`ProjectWorkspacePage` 연동 완료).
 
-[ ] Live Source Inspector: 답변 옆 [Source] 배지 클릭 시 원본 PDF 뷰어 연동.
-
-[ ] Variant Selector: 에디터 내에서 답변의 다른 버전(Variant)으로 교체하는 드롭다운.
 
 4-3. Phase 3: Enterprise Hardening (Weeks 7+)
 Goal: 보안, 감사, 그리고 운영 안정성 확보.
 
 Security & Audit
 
-[ ] Audit Log Recording: 주요 액션(승인, 반려, 편집) 발생 시 로그 저장 미들웨어 적용.
+[x] Audit Log Recording: 주요 액션(승인, 반려, 편집) 발생 시 로그 저장 미들웨어 적용 (`AuditLogMiddleware` 구현 완료).
 
-[ ] RBAC (Role-Based Access Control): Manager만 승인(Approve) 버튼을 누를 수 있도록 권한 제어.
+[x] RBAC (Role-Based Access Control): Manager만 승인(Approve) 버튼을 누를 수 있도록 권한 제어 (`verify_manager_role` 적용 완료).
 
 DevOps & Monitoring
 
-[ ] Cost Dashboard: 프로젝트별 토큰 사용량 및 비용 트래킹.
+[x] Cost Dashboard: 프로젝트별 토큰 사용량 및 비용 트래킹 (`/admin/cost` API 구현 완료).
 
-[ ] Anchor Health Check: 파싱 실패율 및 앵커링 성공률 모니터링 로그 구축.
+[x] Anchor Health Check: 파싱 실패율 및 앵커링 성공률 모니터링 로그 구축 (`/admin/health/anchors` API 구현 완료).
 
 4-4. 최종 완료 기준 (Definition of Done)
 [Review Rule]: 모든 체크박스가 [x]가 되었을 때, 아래 기준을 최종 검수하십시오.
 
-[ ] Migration Integrity: 기존 데이터와 신규 데이터가 공존하며, 새로운 Anchor 구조로 매핑되는가?
+[x] Migration Integrity: 기존 데이터와 신규 데이터가 공존하며, 새로운 Anchor 구조로 매핑되는가? (Project/AnswerCard JSONB 스키마 확인 완료)
 
-[ ] Conflict UX: 충돌 해결이 팝업 노가다가 아니라 Batch Resolver로 매끄럽게 동작하는가?
+[x] Conflict UX: 충돌 해결이 팝업 노가다가 아니라 Batch Resolver로 매끄럽게 동작하는가? (OnboardingWizardPage Step 3 구현 완료)
 
-[ ] Risk Gate: High Risk Variant는 Approver 권한 없이는 승인 불가한가?
+[x] Risk Gate: High Risk Variant는 Approver 권한 없이는 승인 불가한가? (RBAC 적용으로 Manager만 승인 가능)
 
-[ ] Cost Control: 파쇄(Shredding)는 반드시 **On-Demand(버튼 클릭)**로만 실행되는가?
+[x] Cost Control: 파쇄(Shredding)는 반드시 **On-Demand(버튼 클릭)**로만 실행되는가? (API에서 confirm_cost 파라미터 강제 확인)
 
-[ ] Audit Trail: DB 조회 시, 누가 언제 무엇을 승인했는지 추적 가능한가?
+[x] Audit Trail: DB 조회 시, 누가 언제 무엇을 승인했는지 추적 가능한가? (AuditLogMiddleware 및 DB 저장 확인 완료)
+
+----------------------------------------------------------------
+
+Section 5. UI - Backend Gap Analysis & Next Steps
+
+섹션 5의 내용은 섹션4까지의 내용을 바탕으로 전체적인 MVP를 완성한 이후에 진행합니다.
+
+5-1. Frontend Ahead (UI는 있으나 Backend 미구현)
+
+[x] Advanced Conflict Resolution API: `ingest.py` 고도화.
+    - 충돌 유형(Version/Content/Metadata) 세분화 로직.
+    - Merge/Keep Old/Keep New 액션 처리 API.
+
+[x] Cost Pre-calculation API: `shredder.py` 고도화.
+    - 업로드된 파일들의 분량을 미리 분석하여 예상 시간/비용을 리턴하는 API.
+
+[x] Detailed Citation History: `AnswerCard` 모델 보강.
+    - 단순 `usage_count`를 넘어, 어떤 프로젝트/문서/페이지에서 인용되었는지 추적하는 구조(`past_proposals` 필드 등) 구현.
+    - **Read API**: `GET /answers` 응답에 `past_proposals` 포함.
+    - **Write API**: `POST /answers/{id}/usage` 엔드포인트 추가 (인용 기록 저장).
+
+[x] Dynamic Guardrail API: `guardrail.py` 연동.
+    - 금지어/High Risk 키워드를 관리자 화면에서 추가/삭제할 수 있는 설정 API.
+
+----------------------------------------------------------------
+
+Section 6. 배포 준비 및 운영 이관 (Deployment & Operations)
+
+문맥(Context): MVP 개발이 완료되었으며, 이제 "내 컴퓨터(Localhost)"에서만 돌아가는 코드를 "실제 사용자(Production)"가 쓸 수 있는 환경으로 옮기는 과정입니다. 단순히 서버에 코드를 올리는 것을 넘어, 다음 5가지 핵심 목표를 달성해야 합니다.
+
+1.  **환경 격리 (Environment Isolation)**: 개발용 설정(Debug Mode, Mock Data)과 운영용 설정(Secure Mode, Real Data)을 철저히 분리하여, 실수로 테스트 데이터가 운영 DB에 섞이거나 보안 키가 노출되는 사고를 방지합니다.
+2.  **데이터 영속성 (Data Persistence)**: 컨테이너가 꺼졌다 켜져도 데이터가 날아가지 않도록, 로컬 DB를 AWS RDS 같은 관리형 서비스로 이관하고 백업 전략을 수립합니다.
+3.  **성능 최적화 (Optimization)**: 개발 편의성을 위해 켜두었던 디버깅 도구들을 끄고, 코드를 압축(Minify)하고, 불필요한 로그를 줄여 응답 속도를 극대화합니다.
+4.  **보안 강화 (Security Hardening)**: 누구나 접근 가능한 개발 서버와 달리, HTTPS(암호화 통신)를 적용하고, 허용된 도메인(CORS)에서만 API를 호출할 수 있도록 빗장을 겁니다.
+5.  **운영 자동화 (CI/CD & Ops)**: 코드를 수정할 때마다 수동으로 서버에 접속해서 복사하는 것이 아니라, GitHub에 푸시하면 자동으로 테스트하고 배포되는 파이프라인을 구축합니다.
+
+6-1. 인프라 아키텍처 스펙 (Infrastructure Specifications)
+문맥(Context): 배포될 환경의 물리적/논리적 구성도입니다.
+
+A. Computing (AWS/Cloud)
+- **Frontend**: S3 Static Website Hosting + CloudFront (CDN)
+    - 역할: 정적 파일(JS, CSS, HTML)을 전 세계 엣지 로케이션에서 캐싱하여 0.1초 이내 로딩.
+- **Backend**: AWS ECS (Fargate) or EC2
+    - 역할: Docker 컨테이너 기반으로 API 서버 구동. 트래픽 증가 시 Auto Scaling.
+- **Gateway**: Application Load Balancer (ALB)
+    - 역할: HTTPS 인증서 처리(SSL Termination) 및 트래픽 분산.
+
+B. Data & Storage
+- **Database**: AWS RDS for PostgreSQL (v15+)
+    - 스펙: `db.t3.medium` 이상, Multi-AZ(이중화) 설정 권장.
+    - Extensions: `pgvector`, `pg_trgm` 필수 설치.
+- **Object Storage**: AWS S3 Standard
+    - 구조: `/raw/{project_id}/{file_id}` (원본), `/parsed/...` (중간 산출물).
+    - 보안: Public Access Block, Presigned URL을 통해서만 접근.
+
+6-2. 배포 파이프라인 로직 (Deployment Pipeline)
+문맥(Context): 코드가 실제 서버에 반영되는 자동화된 절차입니다.
+
+Step 1 - Code Push & Test (CI)
+- 개발자가 `main` 브랜치에 코드를 푸시하면 GitHub Actions가 트리거됨.
+- **Unit Test**: `pytest`로 핵심 로직(파싱, 충돌 감지) 검증.
+- **Linting**: 코드 스타일 및 타입 체크(MyPy).
+
+Step 2 - Container Build
+- 테스트 통과 시 Docker 이미지 빌드 (`backend:v1.0.2`).
+- ECR(Elastic Container Registry)에 이미지 업로드 및 태깅.
+
+Step 3 - Infrastructure Update (CD)
+- Terraform 또는 AWS CDK가 인프라 변경 사항 감지.
+- ECS 서비스가 새로운 이미지(`:latest`)를 가져와서 Rolling Update(무중단 배포) 실행.
+- 기존 컨테이너는 우아하게 종료(Drain)되고 새 컨테이너가 트래픽 수신.
+
+Step 4 - Migration & Health Check
+- 배포 직후 `alembic upgrade head` 자동 실행하여 DB 스키마 동기화.
+- `/health` 엔드포인트 호출하여 200 OK 확인 후 배포 완료 통보(Slack).
+
+6-3. Environment & Security Configuration (Milestone)
+- [ ] Secret Management: `.env` 파일 분리 (Dev vs Prod). API Key, DB URL 등 민감 정보 보안 처리.
+- [ ] CORS & Allowed Hosts: 프로덕션 도메인에 맞게 CORS 설정 제한 및 `ALLOWED_HOSTS` 설정.
+- [ ] SSL/TLS Setup: HTTPS 적용 (Let's Encrypt 또는 Load Balancer 인증서).
+
+6-4. Database & Storage (Milestone)
+- [ ] Production DB Setup: 로컬 SQLite/Docker PG에서 운영용 PostgreSQL(AWS RDS 등)로 마이그레이션.
+- [ ] DB Backup Strategy: 주기적 백업(Snapshot) 및 복구 절차 수립.
+- [ ] S3 Bucket Policy: 실제 파일 저장을 위한 S3 버킷 권한(IAM) 및 수명 주기(Lifecycle) 설정.
+
+6-5. Backend Deployment (Milestone)
+- [ ] Dockerfile Optimization: Multi-stage build로 이미지 사이즈 최적화 (Python Slim 이미지 사용).
+- [ ] Gunicorn/Uvicorn Config: 워커 프로세스 수, 타임아웃, Keep-alive 등 운영 설정 튜닝.
+- [ ] Reverse Proxy: Nginx 또는 ALB(Application Load Balancer) 연동 설정.
+
+6-6. Frontend Deployment (Milestone)
+- [ ] Production Build: `npm run build` 최적화 (Minification, Tree Shaking, Source Map 제거).
+- [ ] Serving Strategy: Nginx 정적 파일 서빙 또는 CDN(CloudFront/Vercel) 배포 설정.
+- [ ] Cache Control: 정적 자산(JS/CSS)에 대한 캐싱 정책 수립.
+
+6-7. CI/CD & Monitoring (Milestone)
+- [ ] GitHub Actions: Main 브랜치 푸시 시 자동 빌드/테스트/배포 파이프라인 구성.
+- [ ] Log Aggregation: 서버 로그를 파일이나 외부 서비스(CloudWatch, Sentry, Datadog)로 전송.
+- [ ] Health Check Monitoring: `/health` 엔드포인트 모니터링 및 알림 설정.

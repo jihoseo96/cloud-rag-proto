@@ -22,6 +22,7 @@ class AnswerCard(Base):
     anchors = Column(JSONB, nullable=True)
     variants = Column(JSONB, nullable=True)
     facts = Column(JSONB, nullable=True)
+    past_proposals = Column(JSONB, nullable=True, server_default=text("'[]'::jsonb"))
     created_at = Column(TIMESTAMP, server_default=text("now()"))
     updated_at = Column(TIMESTAMP, server_default=text("now()"))
 
