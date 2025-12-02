@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.db import SessionLocal
@@ -15,6 +17,90 @@ def get_db():
         yield db
     finally:
         db.close()
+
+from app.models.user import AppUser
+import uuid
+
+@router.get("/members")
+def list_members(db: Session = Depends(get_db)):
+    members = db.query(AppUser).filter(AppUser.workspace == WORKSPACE).all()
+    return [
+        {
+            "id": str(m.id),
+            "name": m.name,
+            "email": m.email,
+            "role": m.role,
+            "status": m.status,
+            "joinedAt": m.joined_at,
+            "lastActive": m.last_active,
+            "avatar": m.avatar
+        }
+        for m in members
+    ]
+
+class InviteBody(BaseModel):
+    email: str
+    role: str
+
+@router.post("/invite")
+def invite_member(body: InviteBody, db: Session = Depends(get_db)):
+    # Check if already exists
+    existing = db.query(AppUser).filter(AppUser.email == body.email, AppUser.workspace == WORKSPACE).first()
+    if existing:
+        return {"status": "already_exists", "id": str(existing.id)}
+    
+    new_member = AppUser(
+        email=body.email,
+        name=body.email.split("@")[0], # Default name from email
+        workspace=WORKSPACE,
+        role=body.role,
+        status="pending"
+    )
+    db.add(new_member)
+    db.commit()
+    db.refresh(new_member)
+    
+    return {
+        "id": str(new_member.id),
+        "name": new_member.name,
+        "email": new_member.email,
+        "role": new_member.role,
+        "status": new_member.status,
+        "joinedAt": new_member.joined_at
+    }
+
+class RoleUpdateBody(BaseModel):
+    role: str
+
+@router.patch("/members/{member_id}/role")
+def update_member_role(member_id: str, body: RoleUpdateBody, db: Session = Depends(get_db)):
+    try:
+        m_uuid = uuid.UUID(member_id)
+    except:
+        raise HTTPException(400, "Invalid ID")
+        
+    member = db.get(AppUser, m_uuid)
+    if not member:
+        raise HTTPException(404, "Member not found")
+        
+    member.role = body.role
+    db.commit()
+    return {"status": "success", "role": member.role}
+
+@router.delete("/members/{member_id}")
+def remove_member(member_id: str, db: Session = Depends(get_db)):
+    try:
+        m_uuid = uuid.UUID(member_id)
+    except:
+        raise HTTPException(400, "Invalid ID")
+        
+    member = db.get(AppUser, m_uuid)
+    if not member:
+        raise HTTPException(404, "Member not found")
+        
+    db.delete(member)
+    db.commit()
+    return {"status": "deleted"}
 
 @router.get("/cost")
 def get_cost_dashboard(db: Session = Depends(get_db)):
@@ -41,8 +127,54 @@ def get_anchor_health(db: Session = Depends(get_db)):
     total_cards = db.query(AnswerCard).count()
     # Mock health stats
     return {
-        "total_answer_cards": total_cards,
-        "parsing_success_rate": 98.5,
-        "average_confidence": 0.92,
-        "failed_anchors": 0
+        "status": "healthy",
+        "uptime": 3600 * 24 * 10, # 10 days
+        "version": "1.0.0",
+        "cpuUsage": 45,
+        "memoryUsage": 60
     }
+
+class GuardrailsBody(BaseModel):
+    prohibited_words: List[dict]
+    risk_policy: dict
+
+from app.models.guardrail import GuardrailPolicy
+import os
+
+WORKSPACE = os.getenv("WORKSPACE", "personal")
+
+@router.get("/guardrails")
+def get_guardrails(db: Session = Depends(get_db)):
+    policy = db.query(GuardrailPolicy).filter(GuardrailPolicy.workspace == WORKSPACE).first()
+    if not policy:
+        return {
+            "prohibited_words": [],
+            "risk_policy": {
+                "autoRejectFactMismatch": True,
+                "requireApprovalHighRisk": True,
+                "confidenceThreshold": [70],
+                "minSourceCount": [2]
+            }
+        }
+    return {
+        "prohibited_words": policy.prohibited_words,
+        "risk_policy": policy.risk_policy
+    }
+
+@router.post("/guardrails")
+def update_guardrails(body: GuardrailsBody, db: Session = Depends(get_db)):
+    policy = db.query(GuardrailPolicy).filter(GuardrailPolicy.workspace == WORKSPACE).first()
+    if not policy:
+        policy = GuardrailPolicy(
+            workspace=WORKSPACE,
+            prohibited_words=body.prohibited_words,
+            risk_policy=body.risk_policy
+        )
+        db.add(policy)
+    else:
+        policy.prohibited_words = body.prohibited_words
+        policy.risk_policy = body.risk_policy
+    
+    db.commit()
+    db.refresh(policy)
+    return {"status": "success", "updated_at": policy.updated_at.isoformat()}

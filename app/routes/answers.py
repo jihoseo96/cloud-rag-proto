@@ -91,17 +91,36 @@ def add_answer_variant(answer_id: UUID, body: VariantCreateBody, db: Session = D
 def list_answers(
     group_id: Optional[UUID] = Query(None),
     status: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(AnswerCard).filter(AnswerCard.workspace == WORKSPACE)
+    query = db.query(AnswerCard).filter(AnswerCard.workspace == WORKSPACE)
     if group_id:
-        q = q.filter(AnswerCard.group_id == group_id)
+        query = query.filter(AnswerCard.group_id == group_id)
     if status:
-        q = q.filter(AnswerCard.status == status)
+        query = query.filter(AnswerCard.status == status)
+    if q:
+        # Simple case-insensitive search
+        search_term = f"%{q}%"
+        query = query.filter(
+            (AnswerCard.question.ilike(search_term)) | 
+            (AnswerCard.answer.ilike(search_term))
+        )
 
-    cards = q.order_by(AnswerCard.created_at.desc()).limit(100).all()
-    return [
-        {
+    cards = query.order_by(AnswerCard.created_at.desc()).limit(100).all()
+    
+    results = []
+    for c in cards:
+        # Calculate usage stats
+        usage_count = len(c.past_proposals) if c.past_proposals else 0
+        last_used = None
+        if c.past_proposals:
+            # Assuming past_proposals has 'date' field in ISO format
+            dates = [p.get('date') for p in c.past_proposals if p.get('date')]
+            if dates:
+                last_used = max(dates)
+
+        results.append({
             "id": str(c.id),
             "question": c.question,
             "answer": c.answer,
@@ -112,10 +131,38 @@ def list_answers(
             "variants": c.variants,
             "anchors": c.anchors,
             "facts": c.facts,
-            "past_proposals": c.past_proposals
-        }
-        for c in cards
-    ]
+            "past_proposals": c.past_proposals,
+            
+            # Frontend specific fields
+            "topic": c.question, # Map question to topic
+            "summary": c.answer[:100] + "..." if len(c.answer) > 100 else c.answer,
+            "usageCount": usage_count,
+            "lastUsed": last_used
+        })
+    
+    return results
+
+class AnswerUpdateBody(BaseModel):
+    answer: Optional[str] = None
+    question: Optional[str] = None
+    status: Optional[str] = None
+
+@router.patch("/{answer_id}")
+def update_answer(answer_id: UUID, body: AnswerUpdateBody, db: Session = Depends(get_db)):
+    card = db.get(AnswerCard, answer_id)
+    if not card:
+        raise HTTPException(404, "AnswerCard not found")
+    
+    if body.answer is not None:
+        card.answer = body.answer
+    if body.question is not None:
+        card.question = body.question
+    if body.status is not None:
+        card.status = body.status
+        
+    db.commit()
+    db.refresh(card)
+    return {"id": str(card.id), "status": card.status}
 
 class UsageBody(BaseModel):
     project_id: str

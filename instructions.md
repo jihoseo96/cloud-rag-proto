@@ -1,4 +1,4 @@
-📘 Enterprise RFP OS — Project Instruction (v2025.11.28)
+📘 Enterprise RFP OS — Project Instruction (v2025.12.02)
 Section 1. 프로젝트 정의 및 핵심 가치 (General & Philosophy)
 문맥(Context): 이 섹션은 개발의 **대원칙(Rule)**이자 **방향성(Compass)**입니다. 기술적 의사결정 시 이 원칙에 위배되는 코드는 작성하지 않습니다.
 
@@ -59,7 +59,8 @@ Section 2. 기술 스펙 및 아키텍처 (Technical Specifications)
 문맥(Context): 이 섹션은 **구현(Implementation)**을 위한 구체적인 명세입니다. 변수명, 데이터 구조, 디렉토리 구조는 이 기준을 엄격히 따릅니다.
 
 2-1. 기술 스택 (Tech Stack)
-Backend: Python 3.11 / FastAPI
+Backend: Python 3.11 / FastAPI  
+        (컨테이너 기반, AWS App Runner에 배포. 필요 시 AWS ECS Fargate로 이전 가능)
 
 Frontend: React + Vite
 
@@ -69,9 +70,9 @@ Storage: AWS S3 (원본 영구 보존)
 
 AI Models:
 
-Drafting: gpt-4o-mini
+ -Drafting: gpt-4o-mini
 
-Embedding: text-embedding-3-small
+ -Embedding: text-embedding-3-small
 
 Security: Multi-tenancy (Workspace → Group → Project)
 
@@ -169,6 +170,22 @@ audit_log {
   "user_id": "string",
   "timestamp": "timestamp",
   "diff_snapshot": { ... }
+}
+
+E. Document (Source File & Folder)
+
+JSON
+
+document {
+  "id": "UUID",
+  "workspace": "personal | team",
+  "group_id": "UUID",
+  "title": "filename.pdf or FolderName",
+  "s3_key_raw": "string (nullable for folders)",
+  "sha256": "string",
+  "created_at": "timestamp",
+  "parent_id": "UUID (nullable, self-reference)",
+  "is_folder": "boolean (default false)"
 }
 2-3. 핵심 비즈니스 로직 (Pipelines)
 Step 1 - Zero Ingestion: 업로드 즉시 분석 시작. UI는 "날짜 추출 중...", "섹션 분석 중..." 실시간 표시.
@@ -525,6 +542,80 @@ DevOps & Monitoring
 
 ----------------------------------------------------------------
 
+4-5. Phase 4: Wiring & Integration (The Missing Link)
+Goal: "UI Shell"과 "Backend Logic"을 연결하여 실제 동작하는 애플리케이션 완성.
+
+A. Project & Onboarding (시작하기)
+- [x] Create Project: `LandingPage` -> `POST /projects` (DB 생성 연동).
+- [x] Upload File: `OnboardingWizardPage` -> `POST /ingest/upload` (파일 저장 및 파싱 연동).
+- [x] Check Conflict: `OnboardingWizardPage` -> `POST /ingest/check` (충돌 감지 로직 연동).
+- [x] Resolve Conflict: `OnboardingWizardPage` -> `POST /ingest/resolve` (충돌 해결 API 연동).
+- [x] Estimate Cost: `OnboardingWizardPage` -> `POST /shredder/estimate` (토큰 비용 계산 연동).
+- [x] Trigger Analysis: `OnboardingWizardPage` -> `POST /shredder/trigger` (파쇄 및 분석 시작 연동).
+
+B. Workspace & Requirements (작업 공간)
+- [x] List Requirements: `ProjectWorkspacePage` -> `GET /projects/{id}/requirements` (테이블 데이터 연동).
+- [x] View Detail: `ProjectWorkspacePage` (Side Panel) -> `GET /requirements/{id}` (상세 내용 연동).
+- [x] Approve/Reject: `ProjectWorkspacePage` -> `PATCH /requirements/{id}/status` (상태 변경 연동).
+- [x] Edit Response: `ProjectWorkspacePage` -> `POST /requirements/{id}/response` (답변 수정/저장 연동).
+- [x] Export: `ProjectWorkspacePage` -> `GET /projects/{id}/export` (엑셀/워드 다운로드 연동).
+
+C. Knowledge Hub (지식 관리)
+- [x] List Answer Cards: `KnowledgeHubPage` (Tab 1) -> `GET /answers` (답변 카드 목록 연동).
+- [x] Search Answer Cards: `KnowledgeHubPage` -> `GET /answers/search` (검색 필터 연동).
+- [x] Update Answer Card: `KnowledgeHubPage` -> `PATCH /answers/{id}` (답변 수정 연동).
+- [x] List Documents: `KnowledgeHubPage` (Tab 2) -> `GET /documents` (문서 목록 연동).
+- [x] Re-Parse Document: `KnowledgeHubPage` -> `POST /documents/{id}/reindex` (재분석 연동).
+- [x] Delete Document: `DocumentsPage` -> `DELETE /documents/{id}` (문서 삭제 연동).
+
+D. Admin & Settings (관리자)
+- [x] Invite Member: `AdminTeamPage` -> `POST /admin/invite` (멤버 초대 연동).
+- [x] List Members: `AdminTeamPage` -> `GET /admin/members` (멤버 목록 연동).
+- [x] Update Role: `AdminTeamPage` -> `PATCH /admin/members/{id}/role` (권한 변경 연동).
+- [x] System Status: `AdminDashboardPage` -> `GET /admin/system/status` (시스템 상태 연동).
+- [x] Update Guardrails: `AdminGuardrailsPage` -> `POST /admin/guardrails` (금지어 설정 연동).
+- [x] Cost Dashboard: `AdminUsagePage` -> `GET /admin/cost` (비용 통계 연동).
+
+## 4-6. Backend Implementation Gaps & Mock Audit (Current Status)
+현재 Backend는 Frontend와의 연동(Wiring)을 최우선으로 구현되었으며, 다음 기능들은 **Mock(가짜 데이터)** 또는 **단순화된 로직**으로 구현되어 있습니다. 실제 운영 환경 배포 전 반드시 구현이 필요합니다.
+
+### A. Admin & Settings (관리자)
+1.  **Guardrails (가드레일)**
+    *   **Status**: Implemented
+    *   **Note**: `GuardrailPolicy` 테이블 생성 및 DB 연동 완료.
+2.  **Cost Dashboard (비용 통계)**
+    *   **Status**: Partial / Mock
+    *   **Gap**: `GET /admin/cost`는 `AuditLog`의 행 개수에 단순 단가(100원)를 곱해 계산함. 실제 토큰 사용량(`tokens_used`)을 기록하고 집계하는 로직 없음.
+3.  **System Status (시스템 상태)**
+    *   **Status**: Mock
+    *   **Gap**: `GET /admin/system/status`는 하드코딩된 상태(Healthy, CPU 45% 등)를 반환. 실제 인프라 모니터링 연동 없음.
+4.  **Member Management (멤버 관리)**
+    *   **Status**: Implemented (Full)
+    *   **Note**: Workspace 레벨(`AppUser`) 및 Project 레벨(`ProjectMember`)의 멤버십 관리 및 접근 제어 구현 완료.
+
+### B. Projects & Requirements (프로젝트)
+5.  **AI Suggestion (AI 제안)**
+    *   **Status**: Implemented
+    *   **Note**: `map_requirements_to_answers`에서 RAG 기반 검색 및 LLM 생성 로직 구현 완료.
+6.  **Sources & Past Proposals (출처 및 과거 제안)**
+    *   **Status**: Implemented
+    *   **Note**: `AnswerCard`의 `anchors` 및 `past_proposals` 필드를 UI에 연동 완료.
+
+### C. Shredder & Ingest (분석 및 수집)
+7.  **Cost Estimation (비용 예측)**
+    *   **Status**: Heuristic
+    *   **Gap**: `calculate_shredding_cost`는 텍스트 길이나 파일 크기 기반의 단순 추정치임. 실제 LLM 토크나이저를 통한 정확한 토큰 계산 아님.
+8.  **Conflict Resolution (충돌 해결)**
+    *   **Status**: Simplified
+    *   **Gap**: 충돌 해결 시 클라이언트가 파일을 다시 업로드하는 방식(Stateless)을 가정함. 서버 측 임시 저장소나 캐시를 활용한 최적화 고려 가능.
+
+### D. Authentication & Groups (인증 및 그룹)
+9.  **User Authentication (사용자 인증)**
+    *   **Status**: Hardcoded
+    *   **Gap**: `groups.py`, `chats.py` 등에서 `user_email`이나 `user_id`가 하드코딩("jihoseo852@gmail.com", "demo-user")되어 있음. 실제 JWT/Session 기반 인증 미적용.
+
+----------------------------------------------------------------
+
 Section 5. UI - Backend Gap Analysis & Next Steps
 
 섹션 5의 내용은 섹션4까지의 내용을 바탕으로 전체적인 MVP를 완성한 이후에 진행합니다.
@@ -545,6 +636,55 @@ Section 5. UI - Backend Gap Analysis & Next Steps
 
 [x] Dynamic Guardrail API: `guardrail.py` 연동.
     - 금지어/High Risk 키워드를 관리자 화면에서 추가/삭제할 수 있는 설정 API.
+    - `GuardrailPolicy` DB 모델 및 `admin.py` 연동 완료.
+
+[x] Workspace Member Management: `admin.py` & `user.py` 연동.
+    - `AppUser` 모델에 `workspace`, `role`, `status` 등 필드 추가.
+    - 멤버 초대(`POST /admin/invite`), 조회(`GET /admin/members`), 권한 변경(`PATCH /admin/members/{id}/role`) API 구현.
+    - Frontend `AdminTeamPage`와 연동 완료.
+
+[x] Knowledge Hub Wiring: `answers.py` & `documents.py` 연동.
+    - `AnswerLibraryPage`를 위한 `GET /answers` 응답 포맷 확장 (`topic`, `summary`, `usageCount` 등).
+    - `SourceDocumentsPage`를 위한 `GET /documents/list` 응답 포맷 확장 (`parsingStatus`, `fileSize` 등).
+
+[x] Project Visibility & Membership (Phase 4):
+    - `ProjectMember` 테이블 신설 (`app/models/project_member.py`).
+    - 프로젝트 생성 시 작성자 자동 멤버 추가 (`projects.py`).
+    - 프로젝트 목록 조회 시 멤버십 기반 필터링 (`projects.py`).
+
+### 5-2. Backend Requirements (Completed)
+
+#### Folder Management API (Completed)
+- [x] `POST /folders`: Create a new folder.
+- [x] `DELETE /folders/:id`: Delete a folder (cascade delete children).
+- [x] Update `Document` model to support `parent_id` and `is_folder`.
+
+#### Tree View API (Completed)
+- [x] `GET /documents/tree`: Fetch documents in a hierarchical structure.
+- [x] Update `POST /upload` to accept `folder_id`.
+
+5-2. Frontend-Backend Integration (Fixes)
+문맥(Context): 사용자가 로컬 테스트 중 발견한 "Mock Data" 사용 영역을 실제 API 연동으로 교체합니다.
+
+[x] Answer Library Integration: `AnswerLibraryPage.tsx`
+    - `mockAnswers` 제거 및 `GET /answers` 연동.
+    - 검색/필터 기능 API 파라미터 매핑.
+
+[x] Source Documents Integration: `SourceDocumentsPage.tsx`
+    - `mockDocuments` 제거 및 `GET /documents` 연동.
+    - Re-Parse, Delete 액션 연동.
+
+[x] Projects List Integration: `ProjectsPage.tsx`
+    - `projects` Mock Array 제거 및 `GET /projects` 연동.
+    - 진행률(Progress), 카드 수 등 통계 데이터 매핑.
+
+[x] RFP Upload Flow Fix: `OnboardingWizardPage.tsx`
+    - 프로젝트 생성 전 파일 업로드 시 `project_id` 누락 문제 해결.
+    - `ingest.py`에서 `project_id=None`일 경우 Default Workspace("personal")로 처리 확인.
+
+[x] Admin & Guardrails Verification: `AdminGuardrailsPage.tsx`
+    - `GET /admin/guardrails` 응답 구조 검증 및 연동 확인.
+    - `AdminTeamPage.tsx`의 `members` Mock Data 제거 및 `GET /admin/members` 연동.
 
 ----------------------------------------------------------------
 
@@ -558,67 +698,201 @@ Section 6. 배포 준비 및 운영 이관 (Deployment & Operations)
 4.  **보안 강화 (Security Hardening)**: 누구나 접근 가능한 개발 서버와 달리, HTTPS(암호화 통신)를 적용하고, 허용된 도메인(CORS)에서만 API를 호출할 수 있도록 빗장을 겁니다.
 5.  **운영 자동화 (CI/CD & Ops)**: 코드를 수정할 때마다 수동으로 서버에 접속해서 복사하는 것이 아니라, GitHub에 푸시하면 자동으로 테스트하고 배포되는 파이프라인을 구축합니다.
 
+---
+
 6-1. 인프라 아키텍처 스펙 (Infrastructure Specifications)
-문맥(Context): 배포될 환경의 물리적/논리적 구성도입니다.
+
+문맥(Context): 배포될 환경의 물리적/논리적 구성도입니다.  
+Compute 레이어는 **AWS App Runner**를 1차 기본값으로 사용하며, 같은 AWS 계정/VPC 내에서 **ECS Fargate**로 이전 가능한 구조를 유지합니다.
 
 A. Computing (AWS/Cloud)
-- **Frontend**: S3 Static Website Hosting + CloudFront (CDN)
+
+- **Frontend**: S3 Static Website Hosting + CloudFront (CDN)  
     - 역할: 정적 파일(JS, CSS, HTML)을 전 세계 엣지 로케이션에서 캐싱하여 0.1초 이내 로딩.
-- **Backend**: AWS ECS (Fargate) or EC2
-    - 역할: Docker 컨테이너 기반으로 API 서버 구동. 트래픽 증가 시 Auto Scaling.
-- **Gateway**: Application Load Balancer (ALB)
-    - 역할: HTTPS 인증서 처리(SSL Termination) 및 트래픽 분산.
+
+- **Backend**: AWS App Runner (Primary Compute)  
+    - 역할: Docker 컨테이너 기반 FastAPI API 서버를 완전관리형(serverless) 환경에서 구동.  
+    - 특징:
+        - 소스: ECR에 저장된 컨테이너 이미지 기반 배포.
+        - 자동 스케일링: 요청 수에 따라 인스턴스를 자동 증감.
+        - 내장 헬스체크 및 롤링 배포 지원.
+        - 환경변수(ENV)를 통해 DB URL, S3 버킷 등 설정 주입.
+
+- **Gateway / Endpoint**: App Runner Custom Domain (+ AWS ACM)  
+    - 역할: HTTPS(SSL/TLS) 종단점 제공 및 사용자 트래픽 수신.
+    - 구성:
+        - Route 53에서 커스텀 도메인 → App Runner 서비스로 매핑.
+        - AWS Certificate Manager(ACM)으로 TLS 인증서 발급 및 연결.
+    - 확장:
+        - 엔터프라이즈 요구 시, CloudFront 또는 ALB + WAF를 App Runner 앞단에 추가하여
+          세밀한 라우팅 및 보안 정책 적용 가능 (추후 Phase에서 고려).
 
 B. Data & Storage
-- **Database**: AWS RDS for PostgreSQL (v15+)
-    - 스펙: `db.t3.medium` 이상, Multi-AZ(이중화) 설정 권장.
-    - Extensions: `pgvector`, `pg_trgm` 필수 설치.
-- **Object Storage**: AWS S3 Standard
-    - 구조: `/raw/{project_id}/{file_id}` (원본), `/parsed/...` (중간 산출물).
-    - 보안: Public Access Block, Presigned URL을 통해서만 접근.
+
+- **Database**: AWS RDS for PostgreSQL (v15+)  
+    - 스펙: `db.t3.medium` 이상, Multi-AZ(이중화) 설정 권장.  
+    - Extensions: `pgvector`, `pg_trgm` 필수 설치.  
+    - 네트워크: Private Subnet에 위치, App Runner에서 VPC Connector를 통해 접근.
+
+- **Object Storage**: AWS S3 Standard  
+    - 구조: `/raw/{project_id}/{file_id}` (원본), `/parsed/...` (중간 산출물).  
+    - 보안:
+        - Public Access Block 활성화 (직접 퍼블릭 공개 금지).
+        - Presigned URL을 통해서만 업로드/다운로드 접근.
+    - 로그/백업 파일 역시 별도 S3 Prefix로 관리.
+
+- **VPC & 네트워크**  
+    - RDS 및 기타 내부 리소스는 Private Subnet에 배치.  
+    - App Runner는 VPC Connector를 통해 해당 VPC에 접속하여 RDS, 내부 서비스에 접근.  
+    - 인바운드 트래픽은 기본적으로 App Runner HTTPS 엔드포인트(또는 CloudFront/ALB)를 통해서만 허용.
+
+---
 
 6-2. 배포 파이프라인 로직 (Deployment Pipeline)
-문맥(Context): 코드가 실제 서버에 반영되는 자동화된 절차입니다.
 
-Step 1 - Code Push & Test (CI)
+문맥(Context): 코드가 실제 서버에 반영되는 자동화된 절차입니다.  
+핵심은 GitHub → GitHub Actions → ECR → App Runner로 이어지는 자동화입니다.
+
+**Step 1 - Code Push & Test (CI)**
+
 - 개발자가 `main` 브랜치에 코드를 푸시하면 GitHub Actions가 트리거됨.
-- **Unit Test**: `pytest`로 핵심 로직(파싱, 충돌 감지) 검증.
-- **Linting**: 코드 스타일 및 타입 체크(MyPy).
+- **Unit Test**: `pytest`로 핵심 로직(파싱, 충돌 감지, Shredder, Guardrail 등) 검증.
+- **Linting**: 코드 스타일 및 타입 체크(MyPy, Ruff 등) 수행.
+- 모든 테스트가 통과하지 않으면 이후 단계(App Runner 배포)는 중단.
 
-Step 2 - Container Build
-- 테스트 통과 시 Docker 이미지 빌드 (`backend:v1.0.2`).
-- ECR(Elastic Container Registry)에 이미지 업로드 및 태깅.
+**Step 2 - Container Build**
 
-Step 3 - Infrastructure Update (CD)
-- Terraform 또는 AWS CDK가 인프라 변경 사항 감지.
-- ECS 서비스가 새로운 이미지(`:latest`)를 가져와서 Rolling Update(무중단 배포) 실행.
-- 기존 컨테이너는 우아하게 종료(Drain)되고 새 컨테이너가 트래픽 수신.
+- 테스트 통과 시 Docker 이미지 빌드 (`backend:{git_sha}` 또는 `backend:v1.0.2` 등 태그).  
+- 빌드 결과를 AWS ECR(Elastic Container Registry)에 이미지 업로드 및 태깅.  
+- 이미지 태그 규칙 예시:
+    - `backend:{git_sha}` (불변 태그)
+    - `backend:latest` (가장 최근 배포 태그)
 
-Step 4 - Migration & Health Check
-- 배포 직후 `alembic upgrade head` 자동 실행하여 DB 스키마 동기화.
-- `/health` 엔드포인트 호출하여 200 OK 확인 후 배포 완료 통보(Slack).
+**Step 3 - App Runner Service Update (CD)**
+
+- Terraform 또는 AWS CDK가 인프라 변경 사항을 감지.  
+- App Runner 서비스가 새로운 ECR 이미지 태그를 참조하도록 업데이트.
+- App Runner가 새로운 이미지를 기준으로 롤링 배포:
+    - 기존 인스턴스를 점진적으로 종료(Drain)하면서 신규 인스턴스가 트래픽 수신.
+    - 헬스체크 실패 시 자동 롤백 정책 구성(가능한 범위 내).
+
+**Step 4 - Migration & Health Check**
+
+- 배포 직후 GitHub Actions 또는 별도 CD 스텝에서 다음 작업 수행:
+    - `alembic upgrade head` 자동 실행하여 DB 스키마 최신 상태로 마이그레이션.
+    - App Runner 서비스의 `/health` 엔드포인트 호출하여 200 OK 확인.
+- Health Check 성공 시:
+    - Slack/Teams Webhook으로 "배포 완료" 알림 전송.
+- 실패 시:
+    - 알림과 함께 직전 이미지로 롤백(수동 또는 자동 롤백 정책).
+
+---
 
 6-3. Environment & Security Configuration (Milestone)
-- [ ] Secret Management: `.env` 파일 분리 (Dev vs Prod). API Key, DB URL 등 민감 정보 보안 처리.
-- [ ] CORS & Allowed Hosts: 프로덕션 도메인에 맞게 CORS 설정 제한 및 `ALLOWED_HOSTS` 설정.
-- [ ] SSL/TLS Setup: HTTPS 적용 (Let's Encrypt 또는 Load Balancer 인증서).
+
+- [ ] **Secret Management**
+    - `.env` 파일을 Dev/Prod로 분리하고, 실제 운영 환경에서는 `.env` 대신:
+        - AWS SSM Parameter Store 또는 Secrets Manager를 사용하여
+          DB URL, OpenAI API Key, JWT Secret 등 민감 정보를 관리.
+    - App Runner 서비스에 환경변수로 주입할 때는 해당 Secret 연동 기능 사용.
+
+- [ ] **CORS & Allowed Origins**
+    - 프론트엔드 도메인(예: `https://app.rfp-os.com`)만 허용하도록 CORS Origin 제한.
+    - OPTIONS Preflight 요청에 대해 FastAPI에서 명시적으로 허용 정책 설정.
+
+- [ ] **SSL/TLS Setup**
+    - Route 53에서 도메인 관리.
+    - AWS Certificate Manager(ACM)로 TLS 인증서 발급.
+    - App Runner Custom Domain에 ACM 인증서 연결하여 HTTPS 강제.
+    - 추후 CloudFront/ALB가 앞단에 추가되는 경우에도 ACM 인증서 재사용.
+
+---
 
 6-4. Database & Storage (Milestone)
-- [ ] Production DB Setup: 로컬 SQLite/Docker PG에서 운영용 PostgreSQL(AWS RDS 등)로 마이그레이션.
-- [ ] DB Backup Strategy: 주기적 백업(Snapshot) 및 복구 절차 수립.
-- [ ] S3 Bucket Policy: 실제 파일 저장을 위한 S3 버킷 권한(IAM) 및 수명 주기(Lifecycle) 설정.
+
+- [ ] **Production DB Setup**
+    - 로컬/테스트 DB(예: Docker Postgres, SQLite)에서 운영용 AWS RDS(PostgreSQL)로 데이터 마이그레이션.
+    - `project`, `answer_card`, `rfp_requirement`, `audit_log` 테이블 및 인덱스/확장(pgvector, pg_trgm) 설정 확인.
+
+- [ ] **DB Backup Strategy**
+    - RDS 자동 백업(일/주 단위) 설정 및 보존 기간 정의.
+    - 중대 변경 전 수동 스냅샷 생성 정책 수립.
+    - 분기/반기 단위로 "복구 리허설"을 통해 실제 복구 절차를 검증.
+- [ ] **S3 Bucket Policy**
+    - 운영용 버킷과 개발/스테이징용 버킷을 분리.
+    - Public Access Block 및 버킷 정책으로 직접 퍼블릭 오브젝트 업로드 금지.
+    - 최소 권한 IAM Role(예: `rfp-backend-s3-role`)을 통해서만 접근 허용.
+    - Lifecycle 정책:
+        - 파싱 중간 산출물은 N일 이후 Glacier로 이동 또는 삭제.
+        - 원본 RFP 문서는 장기 보관(규제/감사 요건 고려).
+
+---
 
 6-5. Backend Deployment (Milestone)
-- [ ] Dockerfile Optimization: Multi-stage build로 이미지 사이즈 최적화 (Python Slim 이미지 사용).
-- [ ] Gunicorn/Uvicorn Config: 워커 프로세스 수, 타임아웃, Keep-alive 등 운영 설정 튜닝.
-- [ ] Reverse Proxy: Nginx 또는 ALB(Application Load Balancer) 연동 설정.
+
+- [ ] **Dockerfile Optimization**
+    - Multi-stage build로 이미지 사이즈 최적화 (예: Python Slim 베이스 이미지 사용).
+    - 불필요한 빌드 도구/테스트 의존성은 최종 이미지에서 제거.
+    - Health Check 엔드포인트(`/health`)는 경량 로직으로 유지.
+
+- [ ] **Gunicorn/Uvicorn Config**
+    - App Runner 내에서 실행할 프로세스 설정:
+        - 워커 프로세스 수 (CPU 코어/메모리 대비 적정값).
+        - 타임아웃, Keep-alive 설정.
+    - FastAPI + Uvicorn/Gunicorn 조합을 기준으로 운영.
+
+- [ ] **App Runner Service Config**
+    - CPU/메모리 사이즈: 초기에 소형으로 시작, 모니터링 후 단계적 증설.
+    - Auto Scaling:
+        - 최소/최대 동시 요청 수(Concurrency) 및 인스턴스 수 설정.
+    - Health Check:
+        - 경로: `/health`
+        - 허용 응답 시간 및 실패 허용 횟수 정의.
+
+- (옵션) **Reverse Proxy / WAF 연동**
+    - 초기 MVP 단계에서는 App Runner 엔드포인트를 직접 사용.
+    - 엔터프라이즈/보안 요구 증가 시:
+        - CloudFront 또는 ALB + WAF를 앞단에 추가하여
+          IP 제한, Rate Limiting, Geo Blocking 등 정책 적용.
+
+---
 
 6-6. Frontend Deployment (Milestone)
-- [ ] Production Build: `npm run build` 최적화 (Minification, Tree Shaking, Source Map 제거).
-- [ ] Serving Strategy: Nginx 정적 파일 서빙 또는 CDN(CloudFront/Vercel) 배포 설정.
-- [ ] Cache Control: 정적 자산(JS/CSS)에 대한 캐싱 정책 수립.
+
+- [ ] **Production Build**
+    - `npm run build` 수행 시 Minification, Tree Shaking 활성화.
+    - Source Map은 운영 환경에서는 비활성화(또는 별도 보호된 경로에만 보관).
+
+- [ ] **Serving Strategy**
+    - 빌드 산출물을 S3 버킷(정적 호스팅 전용)에 업로드.
+    - CloudFront를 통해 전 세계 엣지에서 캐싱/서빙.
+    - CloudFront Origin은 해당 S3 버킷으로 설정.
+
+- [ ] **Cache Control**
+    - JS/CSS 등 정적 자산에 대해 적절한 Cache-Control 헤더 설정:
+        - 파일명에 해시를 포함하고, 장기 캐싱(`max-age`) 허용.
+    - HTML 문서에 대해서는 짧은 캐시 또는 no-cache 정책 유지.
+
+---
 
 6-7. CI/CD & Monitoring (Milestone)
-- [ ] GitHub Actions: Main 브랜치 푸시 시 자동 빌드/테스트/배포 파이프라인 구성.
-- [ ] Log Aggregation: 서버 로그를 파일이나 외부 서비스(CloudWatch, Sentry, Datadog)로 전송.
-- [ ] Health Check Monitoring: `/health` 엔드포인트 모니터링 및 알림 설정.
+
+- [ ] **GitHub Actions**
+    - `main` 브랜치 푸시 시 자동 빌드/테스트/배포 파이프라인 구성.
+    - 백엔드:
+        - 테스트 → Docker Build → ECR Push → App Runner Service Update.
+    - 프론트엔드:
+        - 테스트 → `npm run build` → S3 Sync → CloudFront Invalidation.
+
+- [ ] **Log Aggregation**
+    - App Runner 로그를 CloudWatch Logs로 수집.
+    - 에러 로그, 응답 시간, 요청 수 등의 지표를 대시보드로 시각화.
+    - 필요 시 Sentry/Datadog 등 외부 서비스와 연동하여 애플리케이션 레벨 에러 트래킹.
+
+- [ ] **Health Check Monitoring**
+    - `/health` 엔드포인트에 대한 주기적 모니터링 설정(CloudWatch Synthetics 또는 외부 Uptime 서비스).
+    - 응답 실패 시 Slack/Teams/Webhook으로 알림 전송.
+    - App Runner, RDS, S3, 비용(소비량) 지표에 대한 기본 알람 세트 구성
+        - 예: RDS CPU 80% 이상 지속, 에러율 5xx 증가, 월간 비용 급증 등.
+
+----------------------------------------------------------------

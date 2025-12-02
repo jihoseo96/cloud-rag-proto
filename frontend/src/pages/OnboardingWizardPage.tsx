@@ -3,7 +3,7 @@
  * Step 1: Upload -> Step 2: Analyze -> Step 3: Conflict Resolution
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -21,6 +21,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { ingestApi } from '../api/ingest';
+import { projectApi } from '../api/project';
 
 interface ConflictItem {
   id: string;
@@ -50,6 +51,8 @@ function OnboardingWizardPage() {
   const totalSteps = 4;
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
 
   // Mock conflict data (initially empty, populated if API returns conflict)
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
@@ -57,46 +60,69 @@ function OnboardingWizardPage() {
   const estimatedCost = 120; // KRW
   const estimatedTime = 8; // minutes
 
+  useEffect(() => {
+    // Create a draft project on mount to attach uploads to
+    const initProject = async () => {
+      try {
+        const project = await projectApi.createProject({
+          name: 'Government Defense RFP 2024-Q4',
+          industry: 'defense',
+          rfpType: 'technical',
+          status: 'active'
+        });
+        setProjectId(project.id);
+      } catch (e) {
+        console.error("Failed to create project", e);
+        setUploadError("Failed to initialize project. Please try again.");
+      }
+    };
+    initProject();
+  }, []);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      setUploadedFile(file);
       setIsUploading(true);
       setUploadError(null);
 
+      if (!projectId) {
+        setUploadError("Project not initialized. Please wait...");
+        setIsUploading(false);
+        return;
+      }
+
       try {
-        const result = await ingestApi.uploadFile(file);
+        const result = await ingestApi.uploadFile(file, projectId);
 
         if (result.status === 'success') {
-          // No conflict, go to project or confirmation
-          // For now, let's simulate going to step 4 (Confirm) or directly to project
           console.log('Upload success:', result);
-          navigate('/project/proj-1'); // TODO: Use real project ID
+          // Navigate to project detail if success
+          navigate(`/project/${projectId}`);
         } else if (result.status === 'conflict' && result.conflict_detail) {
-          // Map API conflict to UI ConflictItem
-          // Note: Backend currently gives limited info, so we mock some parts for UI demo
           const newConflict: ConflictItem = {
             id: 'conf-' + Date.now(),
             type: result.conflict_detail.type as any || 'version',
             file1: {
-              name: result.filename, // Existing file (simulated)
-              version: 'v1.0',
+              name: result.filename,
+              version: 'Existing',
               date: new Date(),
               size: 'Unknown',
               preview: 'Existing content...'
             },
             file2: {
-              name: result.filename, // New file
+              name: result.filename,
               version: 'New',
               date: new Date(),
               size: (file.size / 1024).toFixed(1) + ' KB',
               preview: 'New content...'
             },
-            recommendation: 'keep_new', // Default recommendation
+            recommendation: 'keep_new',
             confidence: Math.round((result.conflict_detail.similarity || 0) * 100),
             resolution: undefined
           };
           setConflicts([newConflict]);
-          setCurrentStep(3); // Jump to conflict step
+          setCurrentStep(3);
         }
       } catch (err) {
         console.error('Upload failed', err);
@@ -111,6 +137,28 @@ function OnboardingWizardPage() {
     setConflicts(conflicts.map(c =>
       c.id === conflictId ? { ...c, resolution } : c
     ));
+  };
+
+  const handleConfirmResolution = async () => {
+    // Process all resolved conflicts
+    try {
+      for (const conflict of conflicts) {
+        if (conflict.resolution && conflict.resolution !== 'keep_old') {
+          // We need the file object to re-upload. 
+          // In a real app, we might have it in state or need to ask user to re-select if not cached.
+          // For this MVP, we will assume we can't easily re-upload without the File object.
+          // However, the `handleFileUpload` has the `e.target.files[0]`.
+          // If we only support single file upload, we can store it in state.
+          if (uploadedFile) {
+            await ingestApi.resolveConflict(uploadedFile, conflict.resolution);
+          }
+        }
+      }
+      // After resolving, trigger analysis or go to project
+      navigate('/project/proj-1');
+    } catch (e) {
+      console.error("Failed to resolve conflicts", e);
+    }
   };
 
   const allResolved = conflicts.every(c => c.resolution !== undefined);
@@ -166,12 +214,12 @@ function OnboardingWizardPage() {
               {Array.from({ length: totalSteps }).map((_, idx) => (
                 <div key={idx} className="flex items-center flex-1">
                   <div className={`flex items-center gap-2 flex-1 ${idx + 1 < currentStep ? 'text-teal-400' :
-                      idx + 1 === currentStep ? 'text-foreground' :
-                        'text-muted-foreground'
+                    idx + 1 === currentStep ? 'text-foreground' :
+                      'text-muted-foreground'
                     }`}>
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold border-2 ${idx + 1 < currentStep ? 'bg-teal-500/20 border-teal-500' :
-                        idx + 1 === currentStep ? 'bg-blue-500/20 border-blue-500' :
-                          'bg-muted border-border'
+                      idx + 1 === currentStep ? 'bg-blue-500/20 border-blue-500' :
+                        'bg-muted border-border'
                       }`}>
                       {idx + 1 < currentStep ? (
                         <CheckCircle2 className="h-4 w-4" />
@@ -350,7 +398,7 @@ function OnboardingWizardPage() {
                           </Label>
                           <RadioGroup
                             value={conflict.resolution || ''}
-                            onValueChange={(value) => handleResolutionChange(conflict.id, value as ConflictItem['resolution'])}
+                            onValueChange={(value: string) => handleResolutionChange(conflict.id, value as ConflictItem['resolution'])}
                           >
                             <div className="space-y-2">
                               <div className="flex items-center space-x-2">
@@ -423,7 +471,7 @@ function OnboardingWizardPage() {
                 {currentStep === 3 && (
                   <Button
                     disabled={!allResolved}
-                    onClick={() => navigate('/project/proj-1')}
+                    onClick={handleConfirmResolution}
                     className="bg-teal-600 hover:bg-teal-700 text-white"
                   >
                     Start Analysis

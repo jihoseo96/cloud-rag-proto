@@ -9,6 +9,9 @@ import { EnterpriseLayout } from '../components/EnterpriseLayout';
 import { Button } from '../components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { projectApi } from '../api/project';
+import { ingestApi } from '../api/ingest';
+import { shredderApi } from '../api/shredder';
 
 type AnalysisStep = {
   id: number;
@@ -29,7 +32,7 @@ function LandingPage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
       startAnalysis(files[0]);
@@ -42,28 +45,51 @@ function LandingPage() {
     }
   };
 
-  const startAnalysis = (file: File) => {
+  const startAnalysis = async (file: File) => {
     setIsAnalyzing(true);
-    
-    // Simulate analysis steps
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      currentStep++;
-      
-      setAnalysisSteps(prev => prev.map((step, idx) => {
-        if (idx < currentStep - 1) return { ...step, status: 'completed' };
-        if (idx === currentStep - 1) return { ...step, status: 'running' };
-        return step;
+
+    try {
+      // Step 1: Create Project
+      setAnalysisSteps(prev => prev.map(s => s.id === 1 ? { ...s, status: 'running' } : s));
+      const project = await projectApi.createProject({
+        name: file.name.split('.')[0], // Use filename as project name
+      });
+      console.log('Project created:', project);
+
+      // Step 2: Upload File
+      // Note: We pass projectId as groupId for now to link them
+      const uploadResult = await ingestApi.uploadFile(file, project.id);
+      console.log('File uploaded:', uploadResult);
+
+      setAnalysisSteps(prev => prev.map(s => {
+        if (s.id === 1) return { ...s, status: 'completed' };
+        if (s.id === 2) return { ...s, status: 'running' };
+        return s;
       }));
 
-      if (currentStep > 3) {
-        clearInterval(interval);
-        // Navigate to Project Workspace after analysis complete
-        setTimeout(() => {
-          navigate('/project/new-project/workspace');
-        }, 1000);
-      }
-    }, 2000);
+      // Step 3: Trigger Shredding
+      // We auto-confirm cost for now (or we could show a dialog)
+      const shredResult = await shredderApi.trigger(project.id, true);
+      console.log('Shredding result:', shredResult);
+
+      setAnalysisSteps(prev => prev.map(s => {
+        if (s.id === 2) return { ...s, status: 'completed' };
+        if (s.id === 3) return { ...s, status: 'running' };
+        return s;
+      }));
+
+      // Simulate Matching (since we don't have explicit matching trigger, it might be part of shredding or separate)
+      // For now, just wait a bit and navigate
+      setTimeout(() => {
+        setAnalysisSteps(prev => prev.map(s => s.id === 3 ? { ...s, status: 'completed' } : s));
+        navigate(`/project/${project.id}/workspace`);
+      }, 1000);
+
+    } catch (error) {
+      console.error('Analysis failed:', error);
+      setAnalysisSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' } : s));
+      // Show error toast or message
+    }
   };
 
   const handleSampleClick = () => {
@@ -87,7 +113,7 @@ function LandingPage() {
     <EnterpriseLayout>
       <div className="h-full flex items-center justify-center bg-white">
         <div className="max-w-2xl w-full px-6">
-          
+
           {!isAnalyzing ? (
             // Empty State - Upload
             <>
@@ -107,8 +133,8 @@ function LandingPage() {
                 onDragLeave={() => setIsDragging(false)}
                 className={`
                   border-2 border-dashed rounded-lg p-16 transition-all
-                  ${isDragging 
-                    ? 'border-[#0B57D0] bg-[#0B57D0]/5' 
+                  ${isDragging
+                    ? 'border-[#0B57D0] bg-[#0B57D0]/5'
                     : 'border-[#E0E0E0] hover:border-[#9AA0A6]'
                   }
                 `}
@@ -117,7 +143,7 @@ function LandingPage() {
                   <div className="h-16 w-16 rounded-full bg-[#F7F7F8] flex items-center justify-center">
                     <Upload className="h-8 w-8 text-[#424242]" />
                   </div>
-                  
+
                   <div>
                     <p className="text-[0.9375rem] text-[#1F1F1F] font-medium mb-2">
                       여기로 RFP 파일을 드래그 앤 드롭 하세요
@@ -178,11 +204,10 @@ function LandingPage() {
                       {/* Step Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-[0.9375rem] font-medium ${
-                            step.status === 'completed' ? 'text-[#0E7A4E]' :
+                          <span className={`text-[0.9375rem] font-medium ${step.status === 'completed' ? 'text-[#0E7A4E]' :
                             step.status === 'running' ? 'text-[#0B57D0]' :
-                            'text-[#9AA0A6]'
-                          }`}>
+                              'text-[#9AA0A6]'
+                            }`}>
                             {step.id}/3 {step.label}
                           </span>
                           {step.status === 'completed' && (
@@ -192,7 +217,7 @@ function LandingPage() {
                             <span className="text-[0.75rem] text-[#0B57D0]">진행중</span>
                           )}
                         </div>
-                        
+
                         {/* Progress Bar */}
                         {step.status === 'running' && (
                           <div className="h-1 bg-[#F7F7F8] rounded-full overflow-hidden">

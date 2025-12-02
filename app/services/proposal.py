@@ -15,29 +15,80 @@ def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
     project_uuid = uuid.UUID(project_id)
     requirements = db.query(RFPRequirement).filter(RFPRequirement.project_id == project_uuid).all()
     
+    from app.services.embed import embed_texts
+    from app.services.search import search_chunks
+    from app.services.answers import create_answer_card
+    from openai import OpenAI
+    import os
+    
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
     mapped_count = 0
     
     for req in requirements:
-        # 1. Search for relevant AnswerCards
-        # For MVP, we'll use a simple keyword match or placeholder.
-        # In production, this would use vector search (pgvector).
+        # 1. Embed requirement
+        try:
+            qvec = embed_texts([req.requirement_text])[0]
+        except:
+            continue
+            
+        # 2. Search for existing answers
+        results = search_chunks(
+            db=db,
+            qvec=qvec,
+            qtext=req.requirement_text,
+            top_k=3,
+            prefer_team_answer=True,
+            workspace="personal" # MVP hardcoded
+        )
         
-        # Placeholder logic: Find answers that share words with the requirement
-        # This is very basic. Real implementation needs embeddings.
-        keywords = req.requirement_text.split()[:3] # Take first 3 words
-        query = db.query(AnswerCard).filter(AnswerCard.workspace == "personal") # Assuming personal workspace for now
+        best_match = None
+        if results:
+            top_result = results[0]
+            if top_result["source_type"] == "answer" and top_result["final_score"] > 0.85:
+                best_match = top_result["answer_id"]
         
-        matched_cards = []
-        for card in query.limit(50).all():
-             if any(k.lower() in card.question.lower() or k.lower() in card.answer.lower() for k in keywords):
-                 matched_cards.append(str(card.id))
-                 if len(matched_cards) >= 3: # Top 3 matches
-                     break
-        
-        if matched_cards:
-            req.linked_answer_cards = matched_cards
-            req.anchor_confidence = 0.85 # Dummy confidence
+        if best_match:
+            req.linked_answer_cards = [str(best_match)]
+            req.anchor_confidence = results[0]["final_score"]
             mapped_count += 1
+        else:
+            # 3. Generate new answer if no good match
+            context_text = "\n".join([r["text"] for r in results])
+            
+            prompt = f"""
+            Requirement: {req.requirement_text}
+            
+            Context:
+            {context_text}
+            
+            Based on the context, draft a response to the requirement. 
+            If the context doesn't contain enough info, say "Requires manual input".
+            """
+            
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                generated_answer = response.choices[0].message.content
+                
+                # Create draft card
+                new_card = create_answer_card(
+                    db=db,
+                    workspace="personal",
+                    question=req.requirement_text,
+                    answer=generated_answer,
+                    created_by="AI_Generator",
+                    status="draft",
+                    anchors=[{"text": r["text"], "score": r["final_score"]} for r in results]
+                )
+                
+                req.linked_answer_cards = [str(new_card.id)]
+                req.anchor_confidence = 0.5 # Lower confidence for generated
+                mapped_count += 1
+            except Exception as e:
+                print(f"Generation failed: {e}")
     
     db.commit()
     return {

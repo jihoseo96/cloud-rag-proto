@@ -20,15 +20,23 @@ WORKSPACE = os.getenv("WORKSPACE", "personal")
 async def upload_and_ingest(
     file: UploadFile = File(...),
     group_id: Optional[str] = Form(None),
+    project_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
     Upload a file for ingestion.
-    - Parses the file (PDF/HWP/Text)
-    - Computes SHA256 hash
-    - Checks for conflicts (duplicate files)
-    - Returns parsing result or conflict details
     """
+    # If project_id is provided, resolve group_id
+    if project_id and not group_id:
+        from app.models.project import Project
+        import uuid
+        try:
+            proj = db.get(Project, uuid.UUID(project_id))
+            if proj:
+                group_id = str(proj.group_id)
+        except:
+            pass
+
     try:
         content = await file.read()
         result = ingest_document(

@@ -4,11 +4,8 @@ import { Project, RFPRequirement, AnswerCard } from '../types';
 export const projectApi = {
     // Projects
     getProjects: async (): Promise<Project[]> => {
-        // TODO: Implement backend endpoint for listing projects
-        // For now, returning empty array or mock if backend not ready
-        // const response = await apiClient.get<Project[]>('/projects');
-        // return response.data;
-        return [];
+        const response = await apiClient.get<Project[]>('/projects');
+        return response.data;
     },
 
     getProject: async (projectId: string): Promise<Project> => {
@@ -34,14 +31,10 @@ export const projectApi = {
     },
 
     updateRequirementStatus: async (reqId: string, status: string): Promise<void> => {
-        // TODO: Implement backend endpoint
-        // await apiClient.patch(`/requirements/${reqId}`, { status });
-        console.log(`Updating status for ${reqId} to ${status}`);
+        await apiClient.patch(`/projects/any/requirements/${reqId}/status`, { status });
     },
 
     updateRequirementResponse: async (reqId: string, responseText: string): Promise<void> => {
-        // TODO: Implement backend endpoint (likely creating/updating an AnswerCard)
-        // await apiClient.post(`/requirements/${reqId}/response`, { response: responseText });
-        console.log(`Updating response for ${reqId}`);
+        await apiClient.post(`/projects/any/requirements/${reqId}/response`, { response: responseText });
     }
 };

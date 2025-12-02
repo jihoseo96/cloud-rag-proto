@@ -7,7 +7,7 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { EnterpriseLayout } from '../components/EnterpriseLayout';
-import { 
+import {
   LayoutDashboard,
   Shield,
   Users,
@@ -43,11 +43,11 @@ function AdminPage() {
       description: '보안 및 정책 관리'
     },
     {
-      id: 'team',
-      label: 'Team',
+      id: 'workspace',
+      label: 'Workspace',
       icon: Users,
-      path: '/admin/team',
-      description: '팀원 및 권한 관리'
+      path: '/admin/workspace',
+      description: '워크스페이스 및 권한 관리'
     },
     {
       id: 'usage',
@@ -83,22 +83,22 @@ function AdminPage() {
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = location.pathname.startsWith(tab.path);
-              
+
               return (
                 <button
                   key={tab.id}
                   onClick={() => navigate(tab.path)}
                   className={`
                     relative h-full px-4 flex items-center gap-2 text-[0.875rem] font-medium transition-colors
-                    ${isActive 
-                      ? 'text-[#0B57D0]' 
+                    ${isActive
+                      ? 'text-[#0B57D0]'
                       : 'text-[#424242] hover:text-[#1F1F1F]'
                     }
                   `}
                 >
                   <Icon className="h-4 w-4" />
                   <span>{tab.label}</span>
-                  
+
                   {/* Active indicator */}
                   {isActive && (
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0B57D0]" />

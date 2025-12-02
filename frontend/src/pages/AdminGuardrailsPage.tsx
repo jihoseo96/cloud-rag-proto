@@ -3,14 +3,14 @@
  * Security and Policy management
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Switch } from '../components/ui/switch';
 import { Slider } from '../components/ui/slider';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { 
+import {
   Shield,
   AlertTriangle,
   Save,
@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Ban
 } from 'lucide-react';
+import { adminApi } from '../api/admin';
 
 interface ProhibitedWord {
   id: string;
@@ -37,28 +38,42 @@ function AdminGuardrailsPage() {
   const [minSourceCount, setMinSourceCount] = useState([2]);
 
   // Prohibited Words
-  const [prohibitedWords, setProhibitedWords] = useState<ProhibitedWord[]>([
-    { id: '1', word: 'guaranteed', category: 'marketing', severity: 'error' },
-    { id: '2', word: 'best', category: 'marketing', severity: 'error' },
-    { id: '3', word: '100%', category: 'marketing', severity: 'error' },
-    { id: '4', word: 'always', category: 'marketing', severity: 'warning' },
-    { id: '5', word: 'never fails', category: 'marketing', severity: 'error' },
-    { id: '6', word: 'unlimited', category: 'marketing', severity: 'warning' },
-  ]);
-  
+  const [prohibitedWords, setProhibitedWords] = useState<ProhibitedWord[]>([]);
+
+  useEffect(() => {
+    loadGuardrails();
+  }, []);
+
+  const loadGuardrails = async () => {
+    try {
+      const data = await adminApi.getGuardrails();
+      if (data.risk_policy) {
+        setAutoRejectFactMismatch(data.risk_policy.autoRejectFactMismatch);
+        setRequireApprovalHighRisk(data.risk_policy.requireApprovalHighRisk);
+        setConfidenceThreshold(data.risk_policy.confidenceThreshold);
+        setMinSourceCount(data.risk_policy.minSourceCount);
+      }
+      if (data.prohibited_words) {
+        setProhibitedWords(data.prohibited_words);
+      }
+    } catch (e) {
+      console.error("Failed to load guardrails", e);
+    }
+  };
+
   const [newWord, setNewWord] = useState('');
   const [showSaveNotification, setShowSaveNotification] = useState(false);
 
   const addProhibitedWord = () => {
     if (!newWord.trim()) return;
-    
+
     const newEntry: ProhibitedWord = {
       id: Date.now().toString(),
       word: newWord.trim(),
       category: 'custom',
       severity: 'warning'
     };
-    
+
     setProhibitedWords(prev => [...prev, newEntry]);
     setNewWord('');
   };
@@ -67,19 +82,33 @@ function AdminGuardrailsPage() {
     setProhibitedWords(prev => prev.filter(w => w.id !== id));
   };
 
-  const handleSave = () => {
-    setShowSaveNotification(true);
-    setTimeout(() => setShowSaveNotification(false), 3000);
+  const handleSave = async () => {
+    try {
+      await adminApi.updateGuardrails({
+        prohibited_words: prohibitedWords,
+        risk_policy: {
+          autoRejectFactMismatch,
+          requireApprovalHighRisk,
+          confidenceThreshold,
+          minSourceCount
+        }
+      });
+      setShowSaveNotification(true);
+      setTimeout(() => setShowSaveNotification(false), 3000);
+    } catch (e) {
+      console.error("Failed to save guardrails", e);
+      alert("Failed to save settings");
+    }
   };
 
   const getSeverityBadge = (severity: ProhibitedWord['severity']) => {
-    return severity === 'error' 
+    return severity === 'error'
       ? <Badge className="bg-[#D0362D]/10 text-[#D0362D] border-[#D0362D]/30">Error</Badge>
       : <Badge className="bg-[#EFB81A]/10 text-[#EFB81A] border-[#EFB81A]/30">Warning</Badge>;
   };
 
   const getCategoryColor = (category: ProhibitedWord['category']) => {
-    switch(category) {
+    switch (category) {
       case 'marketing':
         return 'bg-[#0B57D0]/10 text-[#0B57D0] border-[#0B57D0]/30';
       case 'legal':
@@ -121,7 +150,7 @@ function AdminGuardrailsPage() {
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto space-y-8">
-            
+
             {/* Risk Policy Section */}
             <div className="bg-card border border-border rounded-lg">
               <div className="p-5 border-b border-border">
@@ -130,9 +159,9 @@ function AdminGuardrailsPage() {
                   자동 위험 탐지 및 처리 설정
                 </p>
               </div>
-              
+
               <div className="p-5 space-y-6">
-                
+
                 {/* Auto-reject Fact Mismatch */}
                 <div className="flex items-start justify-between">
                   <div className="flex-1 pr-4">
@@ -257,9 +286,9 @@ function AdminGuardrailsPage() {
                   </Badge>
                 </div>
               </div>
-              
+
               <div className="p-5 space-y-4">
-                
+
                 {/* Add New Word */}
                 <div className="bg-muted/30 border border-border rounded-lg p-4">
                   <Label className="text-sm font-medium text-foreground mb-3 block">
@@ -348,7 +377,7 @@ function AdminGuardrailsPage() {
                   Pre-configured rule sets for common compliance requirements
                 </p>
               </div>
-              
+
               <div className="p-5 space-y-3">
                 <div className="w-full flex items-center justify-between p-4 rounded-lg border border-border bg-card">
                   <div className="flex items-center gap-3">

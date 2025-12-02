@@ -9,11 +9,11 @@ import { EnterpriseLayout } from '../components/EnterpriseLayout';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Progress } from '../components/ui/progress';
-import { 
-  Upload, 
-  FileText, 
-  CheckCircle2, 
-  Loader2, 
+import {
+  Upload,
+  FileText,
+  CheckCircle2,
+  Loader2,
   AlertCircle,
   ChevronDown,
   ChevronUp,
@@ -22,8 +22,9 @@ import {
   GitBranch,
   Shield
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { DocumentUpload, ProcessingStep } from '../types';
+import { ingestApi } from '../api/ingest';
 
 function UploadPage() {
   const { projectId } = useParams();
@@ -35,12 +36,12 @@ function UploadPage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
     handleFiles(files);
   };
 
-  const handleFiles = (files: File[]) => {
+  const handleFiles = async (files: File[]) => {
     const newUploads: DocumentUpload[] = files.map((file, idx) => ({
       id: `upload-${Date.now()}-${idx}`,
       projectId: projectId || '',
@@ -49,10 +50,10 @@ function UploadPage() {
       fileType: file.type,
       uploadedAt: new Date(),
       uploadedBy: 'current-user',
-      status: 'processing',
+      status: 'uploading',
       processingSteps: [
-        { step: '보안 스토리지에 파일 업로드', status: 'completed', progress: 100 },
-        { step: '문서 레이아웃 및 구조 파싱', status: 'running', progress: 45 },
+        { step: '보안 스토리지에 파일 업로드', status: 'running', progress: 0 },
+        { step: '문서 레이아웃 및 구조 파싱', status: 'pending', progress: 0 },
         { step: '의미론적 엔티티 추출', status: 'pending', progress: 0 },
         { step: '버전 충돌 감지', status: 'pending', progress: 0 },
         { step: '의미론적 앵커 인덱싱', status: 'pending', progress: 0 },
@@ -62,61 +63,63 @@ function UploadPage() {
 
     setUploads(prev => [...newUploads, ...prev]);
     setExpandedUpload(newUploads[0]?.id || null);
-    
-    // Simulate processing
-    newUploads.forEach((upload, uploadIdx) => {
-      simulateProcessing(upload.id, uploadIdx);
-    });
-    
-    toast.success(`Processing ${files.length} document(s)`);
+
+    // Process each file
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const uploadId = newUploads[i].id;
+
+      try {
+        if (!projectId) throw new Error("Project ID missing");
+
+        // Update status to uploading
+        updateUploadStatus(uploadId, 'processing', 10);
+
+        const result = await ingestApi.uploadFile(file, projectId);
+
+        if (result.status === 'success') {
+          updateUploadStatus(uploadId, 'completed', 100);
+          toast.success(`Uploaded ${file.name}`);
+        } else if (result.status === 'conflict') {
+          // For now, mark as completed but maybe show warning?
+          // The backend returns success for duplicates usually (or we handle it)
+          // But ingestApi returns 'conflict'.
+          // Let's mark as completed with a note or just completed.
+          updateUploadStatus(uploadId, 'completed', 100);
+          toast.info(`Duplicate file: ${file.name}`);
+        } else {
+          updateUploadStatus(uploadId, 'failed', 0);
+          toast.error(`Failed to upload ${file.name}`);
+        }
+      } catch (e) {
+        console.error(e);
+        updateUploadStatus(uploadId, 'failed', 0);
+        toast.error(`Error uploading ${file.name}`);
+      }
+    }
   };
 
-  const simulateProcessing = (uploadId: string, delay: number) => {
-    let currentStep = 1;
-    
-    const processNextStep = () => {
-      setUploads(prev => prev.map(u => {
-        if (u.id !== uploadId) return u;
-        
-        const steps = [...u.processingSteps];
-        
-        if (currentStep < steps.length) {
-          steps[currentStep - 1] = { ...steps[currentStep - 1], status: 'completed', progress: 100 };
-          steps[currentStep] = { ...steps[currentStep], status: 'running', progress: 0 };
-        } else if (currentStep === steps.length) {
-          steps[currentStep - 1] = { ...steps[currentStep - 1], status: 'completed', progress: 100 };
-          return { ...u, status: 'completed', processingSteps: steps };
-        }
-        
-        return { ...u, processingSteps: steps };
+  const updateUploadStatus = (id: string, status: 'completed' | 'processing' | 'failed' | 'uploading', progress: number) => {
+    setUploads(prev => prev.map(u => {
+      if (u.id !== id) return u;
+
+      const newSteps = u.processingSteps.map(s => ({
+        ...s,
+        status: status === 'failed' ? 'failed' : (status === 'completed' ? 'completed' : s.status),
+        progress: status === 'completed' ? 100 : (s.status === 'running' ? progress : 0)
       }));
-      
-      // Simulate progress within current step
-      let progress = 0;
-      const progressInterval = setInterval(() => {
-        progress += Math.random() * 15;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(progressInterval);
-          currentStep++;
-          if (currentStep <= 6) {
-            setTimeout(() => processNextStep(), 500);
-          }
-        }
-        
-        setUploads(prev => prev.map(u => {
-          if (u.id !== uploadId) return u;
-          const steps = [...u.processingSteps];
-          if (steps[currentStep]) {
-            steps[currentStep] = { ...steps[currentStep], progress };
-          }
-          return { ...u, processingSteps: steps };
-        }));
-      }, 200);
-    };
-    
-    setTimeout(() => processNextStep(), delay * 1000);
+
+      // If completed, mark all steps completed
+      if (status === 'completed') {
+        newSteps.forEach(s => { s.status = 'completed'; s.progress = 100; });
+      }
+
+      return { ...u, status, processingSteps: newSteps };
+    }));
   };
+
+  // Removed simulateProcessing
+
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -141,9 +144,9 @@ function UploadPage() {
 
   const overallProgress = uploads.length > 0
     ? uploads.reduce((sum, u) => {
-        const completedSteps = u.processingSteps.filter(s => s.status === 'completed').length;
-        return sum + (completedSteps / u.processingSteps.length) * 100;
-      }, 0) / uploads.length
+      const completedSteps = u.processingSteps.filter(s => s.status === 'completed').length;
+      return sum + (completedSteps / u.processingSteps.length) * 100;
+    }, 0) / uploads.length
     : 0;
 
   return (
@@ -181,8 +184,8 @@ function UploadPage() {
               onDragLeave={() => setIsDragging(false)}
               className={`
                 border-2 border-dashed rounded-lg p-12 transition-all
-                ${isDragging 
-                  ? 'border-[#14b8a6] bg-[#14b8a6]/5' 
+                ${isDragging
+                  ? 'border-[#14b8a6] bg-[#14b8a6]/5'
                   : 'border-border hover:border-muted-foreground/50'
                 }
               `}
@@ -299,11 +302,10 @@ function UploadPage() {
                                 <div className="mt-0.5">{getStepIcon(step)}</div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between gap-2 mb-1">
-                                    <span className={`text-[0.75rem] flex items-center gap-2 ${
-                                      step.status === 'completed' ? 'text-foreground' :
+                                    <span className={`text-[0.75rem] flex items-center gap-2 ${step.status === 'completed' ? 'text-foreground' :
                                       step.status === 'running' ? 'text-foreground font-medium' :
-                                      'text-muted-foreground'
-                                    }`}>
+                                        'text-muted-foreground'
+                                      }`}>
                                       {getDetailIcon(step.step)}
                                       {step.step}
                                     </span>

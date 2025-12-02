@@ -7,7 +7,7 @@
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
-import { 
+import {
   TrendingUp,
   TrendingDown,
   FileText,
@@ -34,33 +34,26 @@ import {
   Cell
 } from 'recharts';
 
+import { adminApi } from '../api/admin';
+import { useState, useEffect } from 'react';
+
 function AdminUsagePage() {
-  // Mock Data
-  const currentPeriod = {
-    apiCalls: 45234,
-    tokensUsed: 1234567,
-    projectsCreated: 28,
-    answerCardsGenerated: 456,
-    activeUsers: 12,
-    storageUsed: 2.3, // GB
-  };
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const limits = {
-    apiCalls: 100000,
-    tokens: 5000000,
-    storage: 10, // GB
-    users: 25,
-  };
+  useEffect(() => {
+    adminApi.getCostDashboard().then(d => {
+      setData(d);
+      setLoading(false);
+    }).catch(e => {
+      console.error(e);
+      setLoading(false);
+    });
+  }, []);
 
-  const weeklyData = [
-    { date: '11/24', apiCalls: 3200, tokens: 85000, projects: 2 },
-    { date: '11/25', apiCalls: 4100, tokens: 105000, projects: 3 },
-    { date: '11/26', apiCalls: 3800, tokens: 95000, projects: 4 },
-    { date: '11/27', apiCalls: 5200, tokens: 142000, projects: 5 },
-    { date: '11/28', apiCalls: 6800, tokens: 178000, projects: 6 },
-    { date: '11/29', apiCalls: 7200, tokens: 195000, projects: 4 },
-    { date: '11/30', apiCalls: 8900, tokens: 234000, projects: 4 },
-  ];
+  if (loading || !data) return <div className="p-6">Loading...</div>;
+
+  const { currentPeriod, limits, weeklyData, topProjects } = data;
 
   const projectTypeData = [
     { name: 'Technical', value: 12, color: '#0B57D0' },
@@ -69,26 +62,18 @@ function AdminUsagePage() {
     { name: 'Other', value: 3, color: '#9AA0A6' },
   ];
 
-  const topProjects = [
-    { name: '2024 국방부 RFP', apiCalls: 8234, tokens: 234567, percentage: 18 },
-    { name: '서울시 스마트시티', apiCalls: 6890, tokens: 198234, percentage: 15 },
-    { name: '금융권 클라우드', apiCalls: 5123, tokens: 156789, percentage: 11 },
-    { name: '헬스케어 통합', apiCalls: 4567, tokens: 134567, percentage: 10 },
-    { name: '기타 프로젝트', apiCalls: 20420, tokens: 510410, percentage: 46 },
-  ];
-
-  const StatCard = ({ 
-    title, 
-    value, 
-    limit, 
-    unit, 
-    icon: Icon, 
+  const StatCard = ({
+    title,
+    value,
+    limit,
+    unit,
+    icon: Icon,
     trend,
-    trendValue 
+    trendValue
   }: any) => {
     const percentage = (value / limit) * 100;
     const isHigh = percentage > 80;
-    
+
     return (
       <div className="border border-[#E0E0E0] rounded-lg p-5">
         <div className="flex items-start justify-between mb-4">
@@ -107,9 +92,8 @@ function AdminUsagePage() {
             </div>
           </div>
           {trend && (
-            <div className={`flex items-center gap-1 ${
-              trend === 'up' ? 'text-[#0E7A4E]' : 'text-[#D0362D]'
-            }`}>
+            <div className={`flex items-center gap-1 ${trend === 'up' ? 'text-[#0E7A4E]' : 'text-[#D0362D]'
+              }`}>
               {trend === 'up' ? (
                 <TrendingUp className="h-4 w-4" />
               ) : (
@@ -119,7 +103,7 @@ function AdminUsagePage() {
             </div>
           )}
         </div>
-        
+
         {limit && (
           <>
             <Progress value={percentage} className="h-2 mb-2" />
@@ -140,7 +124,7 @@ function AdminUsagePage() {
   return (
     <div className="h-full overflow-auto bg-white">
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        
+
         {/* Header */}
         <div>
           <h2 className="text-[1.25rem] font-semibold text-[#1F1F1F]">Usage & Analytics</h2>
@@ -201,12 +185,12 @@ function AdminUsagePage() {
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={weeklyData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
-                <XAxis 
-                  dataKey="date" 
+                <XAxis
+                  dataKey="date"
                   tick={{ fill: '#9AA0A6', fontSize: 12 }}
                   stroke="#E0E0E0"
                 />
-                <YAxis 
+                <YAxis
                   tick={{ fill: '#9AA0A6', fontSize: 12 }}
                   stroke="#E0E0E0"
                 />
@@ -218,10 +202,10 @@ function AdminUsagePage() {
                     fontSize: '12px'
                   }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="apiCalls" 
-                  stroke="#0B57D0" 
+                <Line
+                  type="monotone"
+                  dataKey="apiCalls"
+                  stroke="#0B57D0"
                   strokeWidth={2}
                   dot={{ fill: '#0B57D0', r: 4 }}
                   activeDot={{ r: 6 }}
@@ -270,8 +254,8 @@ function AdminUsagePage() {
             <div className="grid grid-cols-2 gap-2 mt-4">
               {projectTypeData.map((item) => (
                 <div key={item.name} className="flex items-center gap-2">
-                  <div 
-                    className="h-3 w-3 rounded-sm" 
+                  <div
+                    className="h-3 w-3 rounded-sm"
                     style={{ backgroundColor: item.color }}
                   />
                   <span className="text-[0.75rem] text-[#424242]">

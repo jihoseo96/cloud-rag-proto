@@ -13,11 +13,11 @@ export interface IngestResponse {
 }
 
 export const ingestApi = {
-    uploadFile: async (file: File, groupId?: string): Promise<IngestResponse> => {
+    uploadFile: async (file: File, projectId?: string): Promise<IngestResponse> => {
         const formData = new FormData();
         formData.append('file', file);
-        if (groupId) {
-            formData.append('group_id', groupId);
+        if (projectId) {
+            formData.append('project_id', projectId);
         }
 
         const response = await apiClient.post<IngestResponse>('/ingest/upload', formData, {
@@ -27,4 +27,20 @@ export const ingestApi = {
         });
         return response.data;
     },
+
+    resolveConflict: async (file: File, resolution: 'keep_new' | 'keep_old' | 'merge', projectId?: string): Promise<IngestResponse> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('resolution', resolution);
+        if (projectId) {
+            formData.append('project_id', projectId);
+        }
+
+        const response = await apiClient.post<IngestResponse>('/ingest/resolve', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    }
 };

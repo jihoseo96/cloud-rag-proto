@@ -1,5 +1,5 @@
 # app/routes/documents.py
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from app.models.db import SessionLocal
@@ -34,13 +34,10 @@ async def upload_document(
     title: str = Form(...),
     db: Session = Depends(get_db),
     group_id: Optional[str] = Form(None),
+    folder_id: Optional[str] = Form(None), # Added folder_id
 ):
     """
     파일 업로드 엔드포인트.
-    - PDF / DOCX / PPTX / TXT / MD 등 바이너리라면 무엇이든 수용
-    - SHA-256 해시로 멱등 처리
-    - 기존 파일과 동일하면 S3/인덱싱 스킵
-    - extract_text_pages가 포맷 자동 판별
     """
     # 파일 바이트 읽기
     content = await file.read()
@@ -95,6 +92,15 @@ async def upload_document(
         except Exception:
             raise HTTPException(status_code=422, detail="invalid group_id (must be UUID)")
 
+    # folder_id 파싱
+    fid = None
+    if folder_id:
+        try:
+            fid = uuid.UUID(folder_id)
+        except Exception:
+             # Ignore invalid folder_id or raise error? Let's ignore for robustness or raise.
+             pass
+
     # 문서 메타데이터 저장
     db.add(
         Document(
@@ -103,7 +109,9 @@ async def upload_document(
             s3_key_raw=key,
             title=title,
             group_id=gid,
-            sha256=file_hash,  # 🔥 A-1 핵심
+            sha256=file_hash,
+            parent_id=fid, # Set parent folder
+            is_folder=False
         )
     )
     db.commit()
@@ -130,8 +138,6 @@ def reindex_document(
 ):
     """
     특정 document_id에 대해 재인덱스를 수행한다.
-    - 기존 청크 싹 삭제
-    - S3 원본 기준으로 새로 extract→chunk→embed→저장
     """
     # UUID 파싱
     try:
@@ -187,17 +193,14 @@ def list_documents(
 ):
     """
     문서 목록 조회.
-    - group_id가 있으면 해당 그룹의 문서만 조회
-    - 없으면 해당 workspace의 모든 문서 조회 (개인 문서 포함)
     """
-    query = db.query(Document).filter(Document.workspace == workspace)
+    query = db.query(Document).filter(Document.workspace == workspace, Document.is_folder == False) # Only files
 
     if group_id:
         try:
             gid = uuid.UUID(group_id)
             query = query.filter(Document.group_id == gid)
         except ValueError:
-            # group_id가 유효하지 않은 UUID면 빈 리스트 반환 or 400
             return []
     
     # 최신순 정렬
@@ -212,6 +215,107 @@ def list_documents(
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "group_id": str(d.group_id) if d.group_id else None,
             "workspace": d.workspace,
+            
+            # Frontend specific fields
+            "fileName": d.title,
+            "uploadedAt": d.created_at.isoformat() if d.created_at else None,
+            "parsingStatus": "completed", # Mock for now
+            "fileSize": "1.2 MB" # Mock for now
         }
         for d in docs
     ]
+
+@router.delete("/{document_id}")
+def delete_document(document_id: str, db: Session = Depends(get_db)):
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except:
+        raise HTTPException(400, "Invalid ID")
+        
+    doc = db.get(Document, doc_uuid)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+        
+    # If folder, delete children (simple cascade for now)
+    if doc.is_folder:
+        children = db.query(Document).filter(Document.parent_id == doc.id).all()
+        for child in children:
+            db.delete(child)
+            
+    db.delete(doc)
+    db.commit()
+    return {"status": "deleted", "id": document_id}
+
+# ---------------------------------------------------------
+# 4) Folder Management & Tree View
+# ---------------------------------------------------------
+
+from pydantic import BaseModel
+
+class FolderCreate(BaseModel):
+    name: str
+    parent_id: Optional[str] = None
+
+@router.post("/folders")
+def create_folder(body: FolderCreate, db: Session = Depends(get_db)):
+    parent_uuid = None
+    if body.parent_id:
+        try:
+            parent_uuid = uuid.UUID(body.parent_id)
+        except:
+            pass
+            
+    new_folder = Document(
+        id=uuid.uuid4(),
+        workspace=WORKSPACE,
+        title=body.name,
+        is_folder=True,
+        parent_id=parent_uuid,
+        s3_key_raw=None # No S3 key for folders
+    )
+    db.add(new_folder)
+    db.commit()
+    db.refresh(new_folder)
+    
+    return {
+        "id": str(new_folder.id),
+        "name": new_folder.title,
+        "type": "folder",
+        "children": []
+    }
+
+@router.get("/tree")
+def get_document_tree(workspace: str = WORKSPACE, db: Session = Depends(get_db)):
+    """
+    Fetch all documents and folders, construct a tree structure.
+    """
+    all_docs = db.query(Document).filter(Document.workspace == workspace).all()
+    
+    # Build map
+    doc_map = {}
+    roots = []
+    
+    # First pass: create nodes
+    for doc in all_docs:
+        node = {
+            "id": str(doc.id),
+            "name": doc.title,
+            "type": "folder" if doc.is_folder else "file",
+            "uploadedAt": doc.created_at.isoformat() if doc.created_at else None,
+            "parsingStatus": "completed", # Mock
+            "fileSize": "1.2 MB" if not doc.is_folder else None,
+            "children": [],
+            "expanded": True # Default expanded
+        }
+        doc_map[doc.id] = node
+        
+    # Second pass: link children
+    for doc in all_docs:
+        node = doc_map[doc.id]
+        if doc.parent_id and doc.parent_id in doc_map:
+            parent = doc_map[doc.parent_id]
+            parent["children"].append(node)
+        else:
+            roots.append(node)
+            
+    return roots

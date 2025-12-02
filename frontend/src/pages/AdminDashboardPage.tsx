@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { 
+import {
   AlertTriangle,
   Clock,
   CheckCircle2,
@@ -24,6 +24,8 @@ import {
   Shield,
   Eye
 } from 'lucide-react';
+import { adminApi } from '../api/admin';
+import { useEffect } from 'react';
 
 interface ActionRequired {
   id: string;
@@ -47,6 +49,11 @@ interface SystemMetric {
 
 function AdminDashboardPage() {
   const navigate = useNavigate();
+  const [systemStatus, setSystemStatus] = useState<any>(null);
+
+  useEffect(() => {
+    adminApi.getSystemStatus().then(setSystemStatus).catch(console.error);
+  }, []);
 
   // Mock Data
   const actionsRequired: ActionRequired[] = [
@@ -175,7 +182,7 @@ function AdminDashboardPage() {
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
-    
+
     if (minutes < 60) return `${minutes}분 전`;
     if (hours < 24) return `${hours}시간 전`;
     return date.toLocaleDateString('ko-KR');
@@ -184,7 +191,7 @@ function AdminDashboardPage() {
   return (
     <div className="h-full overflow-auto bg-white">
       <div className="p-6 space-y-6 max-w-[1800px] mx-auto">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -208,15 +215,14 @@ function AdminDashboardPage() {
                 className="border border-[#E0E0E0] rounded-lg p-5 hover:shadow-minimal transition-all"
               >
                 <div className="flex items-start justify-between mb-3">
-                  <div 
+                  <div
                     className="h-10 w-10 rounded-lg flex items-center justify-center"
                     style={{ backgroundColor: `${metric.color}15` }}
                   >
                     <Icon className="h-5 w-5" style={{ color: metric.color }} />
                   </div>
-                  <div className={`flex items-center gap-1 text-[0.75rem] font-semibold ${
-                    metric.trend === 'up' ? 'text-[#0E7A4E]' : 'text-[#D0362D]'
-                  }`}>
+                  <div className={`flex items-center gap-1 text-[0.75rem] font-semibold ${metric.trend === 'up' ? 'text-[#0E7A4E]' : 'text-[#D0362D]'
+                    }`}>
                     {metric.trend === 'up' ? (
                       <TrendingUp className="h-3.5 w-3.5" />
                     ) : (
@@ -243,7 +249,7 @@ function AdminDashboardPage() {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-3 gap-4">
-          
+
           {/* Actions Required - 2/3 width */}
           <div className="col-span-2 border border-[#E0E0E0] rounded-lg">
             <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
@@ -303,7 +309,7 @@ function AdminDashboardPage() {
                   <span className="text-[0.8125rem] text-[#424242]">API Status</span>
                 </div>
                 <Badge className="bg-[#0E7A4E]/10 text-[#0E7A4E] border-[#0E7A4E]/30">
-                  Operational
+                  {systemStatus?.status === 'healthy' ? 'Operational' : systemStatus?.status}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
@@ -333,7 +339,7 @@ function AdminDashboardPage() {
                   23% Used
                 </Badge>
               </div>
-              
+
               <div className="pt-4 border-t border-[#E0E0E0]">
                 <div className="text-[0.75rem] text-[#9AA0A6] mb-2">평균 응답 시간</div>
                 <div className="text-[1.5rem] font-semibold text-[#0B57D0] mono">

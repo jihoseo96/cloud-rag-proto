@@ -17,6 +17,78 @@ def get_db():
 class EstimateBody(BaseModel):
     text: str
 
+class TriggerBody(BaseModel):
+    project_id: str
+    confirm_cost: bool = False
+
+@router.post("/trigger")
+def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
+    """
+    Trigger shredding for all documents in a project.
+    """
+    import uuid
+    from app.models.project import Project
+    from app.models.document import Document
+    import os
+
+    # 1. Get Project & Group
+    try:
+        project = db.get(Project, uuid.UUID(body.project_id))
+    except ValueError:
+        raise HTTPException(400, "Invalid project ID")
+        
+    if not project:
+        raise HTTPException(404, "Project not found")
+    
+    if not project.group_id:
+        raise HTTPException(400, "Project has no associated group")
+
+    # 2. Get Documents
+    docs = db.query(Document).filter(Document.group_id == project.group_id).all()
+    if not docs:
+        raise HTTPException(400, "No documents found for this project")
+
+    # 3. Read Content
+    full_text = ""
+    for doc in docs:
+        # Check if s3_key_raw points to local file
+        if doc.s3_key_raw.startswith("file://"):
+            path = doc.s3_key_raw.replace("file://", "")
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    full_text += f.read() + "\n\n"
+            else:
+                print(f"File not found: {path}")
+        else:
+            # Fallback for MVP: maybe it's just a filename in local dir?
+            # Or if we didn't update s3_key_raw correctly in previous steps
+            pass
+    
+    if not full_text.strip():
+        raise HTTPException(400, "No text content found in documents")
+
+    # 4. Execute Shredding
+    # Reuse execute logic or call service directly
+    if not body.confirm_cost:
+        cost = calculate_shredding_cost(full_text)
+        # We return 402 Payment Required to signal frontend to ask for confirmation
+        # But for MVP "Start Analysis" button usually implies consent or we show cost first.
+        # Let's assume frontend handles this.
+        return {
+            "status": "cost_check",
+            "estimated_cost": cost
+        }
+    
+    try:
+        requirements = shred_rfp(db, body.project_id, full_text)
+        return {
+            "status": "success", 
+            "count": len(requirements),
+            "requirements_count": len(requirements)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class ShredBody(BaseModel):
     project_id: str
     text: str

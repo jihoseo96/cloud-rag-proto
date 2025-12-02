@@ -31,6 +31,9 @@ from app.models.project import Project
 from app.models.rfp_requirement import RFPRequirement
 from app.models.audit_log import AuditLog
 from app.models.answer import AnswerCard
+from app.models.guardrail import GuardrailPolicy
+from app.models.user import AppUser
+from app.models.project_member import ProjectMember
 
 # ---------------------------------------------------------
 # 로거 설정
@@ -235,6 +238,8 @@ from app.routes.shredder import router as shredder_router
 app.include_router(shredder_router)
 from app.routes.proposal import router as proposal_router
 app.include_router(proposal_router)
+from app.routes.projects import router as projects_router
+app.include_router(projects_router)
 
 # ---------------------------------------------------------
 # 헬스체크

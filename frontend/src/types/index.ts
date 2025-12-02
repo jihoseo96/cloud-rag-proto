@@ -22,6 +22,12 @@ export interface Project {
   status: 'draft' | 'active' | 'completed' | 'archived';
   dueDate?: Date;
   complianceCoverage?: number; // 0-100%
+  // Dashboard Stats
+  progress?: number;
+  cardsGenerated?: number;
+  requirementsMapped?: number;
+  conflicts?: number;
+  lastActivity?: string;
 }
 
 export interface RFPRequirement {

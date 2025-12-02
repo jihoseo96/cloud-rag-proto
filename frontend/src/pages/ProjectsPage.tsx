@@ -3,10 +3,11 @@
  * Projects List & Empty State with Onboarding
  */
 
+import { useState, useEffect } from 'react';
 import { EnterpriseLayout } from '../components/EnterpriseLayout';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { 
+import {
   FolderOpen,
   Plus,
   Clock,
@@ -16,56 +17,38 @@ import {
   FileText,
   Upload,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { projectApi } from '../api/project';
+import { Project } from '../types';
 
 export default function ProjectsPage() {
-  // Change this to false to see empty state
-  const hasProjects = true;
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data
-  const projects = [
-    {
-      id: 'gov-cloud-rfp-2024',
-      name: '정부 클라우드 RFP 2024',
-      client: '디지털부',
-      status: 'active',
-      dueDate: '2024-12-15',
-      progress: 75,
-      cardsGenerated: 34,
-      requirementsMapped: 28,
-      conflicts: 2,
-      lastActivity: '2시간 전'
-    },
-    {
-      id: 'healthcare-system',
-      name: '의료 시스템 통합',
-      client: '국민건강보험공단',
-      status: 'active',
-      dueDate: '2024-12-20',
-      progress: 45,
-      cardsGenerated: 19,
-      requirementsMapped: 15,
-      conflicts: 5,
-      lastActivity: '1일 전'
-    },
-    {
-      id: 'fintech-integration',
-      name: '핀테크 플랫폼 현대화',
-      client: '한국산업은행',
-      status: 'draft',
-      dueDate: '2025-01-10',
-      progress: 12,
-      cardsGenerated: 8,
-      requirementsMapped: 3,
-      conflicts: 0,
-      lastActivity: '3일 전'
-    },
-  ];
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      setIsLoading(true);
+      const data = await projectApi.getProjects();
+      setProjects(data);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to load projects", err);
+      setError("Failed to load projects. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
-    switch(status) {
+    switch (status) {
       case 'active':
         return <Badge variant="outline" className="bg-[#0E7A4E]/10 text-[#0E7A4E] border-[#0E7A4E]/30 text-[0.6875rem]">진행중</Badge>;
       case 'draft':
@@ -73,12 +56,23 @@ export default function ProjectsPage() {
       case 'completed':
         return <Badge variant="outline" className="bg-[#0B57D0]/10 text-[#0B57D0] border-[#0B57D0]/30 text-[0.6875rem]">완료</Badge>;
       default:
-        return null;
+        return <Badge variant="outline" className="bg-[#9AA0A6]/10 text-[#424242] border-[#E0E0E0] text-[0.6875rem]">{status}</Badge>;
     }
   };
 
+  // Loading State
+  if (isLoading) {
+    return (
+      <EnterpriseLayout>
+        <div className="h-full flex items-center justify-center bg-white">
+          <Loader2 className="h-8 w-8 animate-spin text-[#0B57D0]" />
+        </div>
+      </EnterpriseLayout>
+    );
+  }
+
   // Empty state
-  if (!hasProjects) {
+  if (!isLoading && projects.length === 0) {
     return (
       <EnterpriseLayout>
         <div className="h-full flex flex-col bg-white">
@@ -95,11 +89,11 @@ export default function ProjectsPage() {
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#0B57D0]/10 mb-6">
                 <FolderOpen className="h-8 w-8 text-[#0B57D0]" />
               </div>
-              
+
               <h2 className="text-[1.5rem] font-semibold mb-3 text-[#1F1F1F]">
                 RFP 제안서 작성을 시작하세요
               </h2>
-              
+
               <p className="text-[0.9375rem] text-muted-foreground mb-8 max-w-lg mx-auto">
                 Enterprise RFP OS는 AI 기반으로 제안서 작성을 자동화합니다.
                 <br />
@@ -215,13 +209,13 @@ export default function ProjectsPage() {
                       {getStatusBadge(project.status)}
                     </div>
                     <p className="text-[0.8125rem] text-[#9AA0A6]">
-                      {project.client}
+                      {project.industry} {project.rfpType ? `· ${project.rfpType}` : ''}
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="text-[0.75rem] text-[#9AA0A6] mb-1">마감일</div>
+                    <div className="text-[0.75rem] text-[#9AA0A6] mb-1">생성일</div>
                     <div className="text-[0.8125rem] font-semibold text-[#1F1F1F] mono">
-                      {project.dueDate}
+                      {project.createdAt ? new Date(project.createdAt).toLocaleDateString('ko-KR') : '-'}
                     </div>
                   </div>
                 </div>
@@ -230,12 +224,12 @@ export default function ProjectsPage() {
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[0.75rem] text-[#9AA0A6]">진행률</span>
-                    <span className="text-[0.75rem] font-semibold text-[#0B57D0] mono">{project.progress}%</span>
+                    <span className="text-[0.75rem] font-semibold text-[#0B57D0] mono">{project.progress || 0}%</span>
                   </div>
                   <div className="h-2 bg-[#F7F7F8] rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-[#0B57D0] transition-all"
-                      style={{ width: `${project.progress}%` }}
+                      style={{ width: `${project.progress || 0}%` }}
                     />
                   </div>
                 </div>
@@ -246,28 +240,28 @@ export default function ProjectsPage() {
                     <FileText className="h-4 w-4 text-[#0B57D0]" />
                     <div>
                       <div className="text-[0.6875rem] text-[#9AA0A6]">카드</div>
-                      <div className="text-[0.8125rem] font-semibold text-[#1F1F1F]">{project.cardsGenerated}개</div>
+                      <div className="text-[0.8125rem] font-semibold text-[#1F1F1F]">{project.cardsGenerated || 0}개</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-[#0E7A4E]" />
                     <div>
                       <div className="text-[0.6875rem] text-[#9AA0A6]">매핑완료</div>
-                      <div className="text-[0.8125rem] font-semibold text-[#1F1F1F]">{project.requirementsMapped}개</div>
+                      <div className="text-[0.8125rem] font-semibold text-[#1F1F1F]">{project.requirementsMapped || 0}개</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <AlertCircle className={`h-4 w-4 ${project.conflicts > 0 ? 'text-[#EFB81A]' : 'text-[#9AA0A6]'}`} />
+                    <AlertCircle className={`h-4 w-4 ${(project.conflicts || 0) > 0 ? 'text-[#EFB81A]' : 'text-[#9AA0A6]'}`} />
                     <div>
                       <div className="text-[0.6875rem] text-[#9AA0A6]">충돌</div>
-                      <div className={`text-[0.8125rem] font-semibold ${project.conflicts > 0 ? 'text-[#EFB81A]' : 'text-[#1F1F1F]'}`}>{project.conflicts}건</div>
+                      <div className={`text-[0.8125rem] font-semibold ${(project.conflicts || 0) > 0 ? 'text-[#EFB81A]' : 'text-[#1F1F1F]'}`}>{project.conflicts || 0}건</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-[#9AA0A6]" />
                     <div>
                       <div className="text-[0.6875rem] text-[#9AA0A6]">마지막 활동</div>
-                      <div className="text-[0.8125rem] font-semibold text-[#1F1F1F]">{project.lastActivity}</div>
+                      <div className="text-[0.8125rem] font-semibold text-[#1F1F1F]">{project.lastActivity || '-'}</div>
                     </div>
                   </div>
                 </div>

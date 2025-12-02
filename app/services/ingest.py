@@ -113,7 +113,7 @@ def ingest_document(
         return {
             "status": "conflict",
             "sha256": file_hash,
-            "conflict_details": conflict
+            "conflict_detail": conflict
         }
 
     # 3. Parse Document
@@ -135,12 +135,22 @@ def ingest_document(
     # Convert group_id string to UUID if present
     gid = uuid.UUID(group_id) if group_id else None
 
+    # Save file locally for MVP (Shredder needs it)
+    import os
+    upload_dir = "uploads"
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+    
+    local_path = os.path.join(upload_dir, filename)
+    with open(local_path, "wb") as f:
+        f.write(file_bytes)
+
     new_doc = Document(
         id=uuid.uuid4(),
         workspace=workspace,
         group_id=gid,
         title=filename,
-        s3_key_raw=f"local/{filename}", # Placeholder for MVP
+        s3_key_raw=f"file://{os.path.abspath(local_path)}", # Point to local file
         sha256=file_hash
     )
     db.add(new_doc)
