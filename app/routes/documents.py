@@ -1,6 +1,7 @@
 # app/routes/documents.py
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.models.db import SessionLocal
 from app.models.document import Document
@@ -193,6 +194,7 @@ def list_documents(
 ):
     """
     문서 목록 조회.
+    Source Documents (Knowledge Hub) only shows docs where group_id is NULL.
     """
     query = db.query(Document).filter(Document.workspace == workspace, Document.is_folder == False) # Only files
 
@@ -202,6 +204,9 @@ def list_documents(
             query = query.filter(Document.group_id == gid)
         except ValueError:
             return []
+    else:
+        # If no group_id provided, assume Source Documents (Global) -> group_id IS NULL
+        query = query.filter(Document.group_id.is_(None))
     
     # 최신순 정렬
     docs = query.order_by(Document.created_at.desc()).all()
@@ -224,6 +229,32 @@ def list_documents(
         }
         for d in docs
     ]
+
+class DocumentUpdate(BaseModel):
+    parent_id: Optional[str] = None
+
+@router.put("/{document_id}")
+def update_document(document_id: str, body: DocumentUpdate, db: Session = Depends(get_db)):
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except:
+        raise HTTPException(400, "Invalid ID")
+        
+    doc = db.get(Document, doc_uuid)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+        
+    # Update parent_id (Move)
+    if body.parent_id:
+        try:
+            doc.parent_id = uuid.UUID(body.parent_id)
+        except:
+            doc.parent_id = None # Root
+    else:
+        doc.parent_id = None # Move to root
+        
+    db.commit()
+    return {"status": "updated", "id": document_id, "parent_id": str(doc.parent_id) if doc.parent_id else None}
 
 @router.delete("/{document_id}")
 def delete_document(document_id: str, db: Session = Depends(get_db)):
@@ -249,8 +280,6 @@ def delete_document(document_id: str, db: Session = Depends(get_db)):
 # ---------------------------------------------------------
 # 4) Folder Management & Tree View
 # ---------------------------------------------------------
-
-from pydantic import BaseModel
 
 class FolderCreate(BaseModel):
     name: str
@@ -285,11 +314,28 @@ def create_folder(body: FolderCreate, db: Session = Depends(get_db)):
     }
 
 @router.get("/tree")
-def get_document_tree(workspace: str = WORKSPACE, db: Session = Depends(get_db)):
+def get_document_tree(
+    group_id: Optional[str] = None,
+    workspace: str = WORKSPACE, 
+    db: Session = Depends(get_db)
+):
     """
     Fetch all documents and folders, construct a tree structure.
+    If group_id is None, fetches only global documents (group_id IS NULL).
     """
-    all_docs = db.query(Document).filter(Document.workspace == workspace).all()
+    query = db.query(Document).filter(Document.workspace == workspace)
+    
+    if group_id:
+        try:
+            gid = uuid.UUID(group_id)
+            query = query.filter(Document.group_id == gid)
+        except:
+            return []
+    else:
+        # Default: Global Knowledge Hub -> group_id IS NULL
+        query = query.filter(Document.group_id.is_(None))
+        
+    all_docs = query.all()
     
     # Build map
     doc_map = {}

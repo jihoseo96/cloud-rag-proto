@@ -41,5 +41,9 @@ export const documentsApi = {
 
     reindexDocument: async (id: string): Promise<void> => {
         await apiClient.post(`/documents/${id}/reindex`);
+    },
+
+    updateDocument: async (id: string, data: { parent_id?: string | null }): Promise<void> => {
+        await apiClient.put(`/documents/${id}`, data);
     }
 };

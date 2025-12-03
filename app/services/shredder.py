@@ -39,27 +39,32 @@ def calculate_shredding_cost(text: str) -> Dict[str, Any]:
 def shred_rfp(db: Session, project_id: str, rfp_text: str) -> List[RFPRequirement]:
     """
     Decompose RFP text into individual requirements using LLM.
-    Saves requirements to the database.
+    Also extracts Project Summary and Deadline.
+    Saves requirements to the database and updates Project metadata.
     """
     project = db.get(Project, uuid.UUID(project_id))
     if not project:
         raise ValueError(f"Project {project_id} not found")
 
     prompt = f"""
-    You are an expert RFP analyst. Your task is to decompose the following RFP text into individual, atomic requirements.
+    You are an expert RFP analyst. Your task is to analyze the following RFP text and extract key information.
     
     RFP Text:
-    {rfp_text[:10000]} ... (truncated if too long)
+    {rfp_text[:15000]} ... (truncated if too long)
     
-    Output Format (JSON List):
-    [
-        {{
-            "requirement_text": "The system must support 2FA.",
-            "requirement_type": "security",
-            "compliance_level": "YES" (default)
-        }},
-        ...
-    ]
+    Output Format (JSON):
+    {{
+        "summary": "A brief 1-2 sentence summary of what this project is about.",
+        "deadline": "YYYY-MM-DDTHH:MM:SS" (ISO 8601 format if found, else null),
+        "requirements": [
+            {{
+                "requirement_text": "The system must support 2FA.",
+                "requirement_type": "security",
+                "compliance_level": "YES"
+            }},
+            ...
+        ]
+    }}
     
     Extract as many specific requirements as possible.
     """
@@ -68,7 +73,7 @@ def shred_rfp(db: Session, project_id: str, rfp_text: str) -> List[RFPRequiremen
         response = client.chat.completions.create(
             model=CHAT_MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that extracts requirements from RFP documents."},
+                {"role": "system", "content": "You are a helpful assistant that extracts requirements and metadata from RFP documents."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"}
@@ -76,12 +81,25 @@ def shred_rfp(db: Session, project_id: str, rfp_text: str) -> List[RFPRequiremen
         
         content = response.choices[0].message.content
         result_json = json.loads(content)
+        
+        # 1. Update Project Metadata
+        if "summary" in result_json:
+            project.description = result_json["summary"]
+        if "deadline" in result_json and result_json["deadline"]:
+            # Basic validation/parsing could be added here
+            # For now, store as string or try to parse if model field is datetime
+            # The model field is TIMESTAMP, so we might need to parse it.
+            # However, for MVP, let's assume the LLM gives a valid ISO string or we handle the error.
+            try:
+                from dateutil import parser
+                project.deadline = parser.parse(result_json["deadline"])
+            except:
+                print(f"Failed to parse deadline: {result_json['deadline']}")
+                pass
+        
+        # 2. Save Requirements
         requirements_data = result_json.get("requirements", [])
         
-        # If the LLM returns a direct list instead of {"requirements": [...]}, handle it
-        if isinstance(result_json, list):
-            requirements_data = result_json
-
         created_requirements = []
         for req in requirements_data:
             new_req = RFPRequirement(

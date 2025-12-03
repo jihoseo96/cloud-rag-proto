@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { Project, RFPRequirement, AnswerCard } from '../types';
+import { Project, RFPRequirement, AnswerCard, RequirementView } from '../types';
 
 export const projectApi = {
     // Projects
@@ -19,8 +19,8 @@ export const projectApi = {
     },
 
     // Requirements
-    getRequirements: async (projectId: string): Promise<RFPRequirement[]> => {
-        const response = await apiClient.get<RFPRequirement[]>(`/projects/${projectId}/requirements`);
+    getRequirements: async (projectId: string): Promise<RequirementView[]> => {
+        const response = await apiClient.get<RequirementView[]>(`/projects/${projectId}/requirements`);
         return response.data;
     },
 
@@ -36,5 +36,18 @@ export const projectApi = {
 
     updateRequirementResponse: async (reqId: string, responseText: string): Promise<void> => {
         await apiClient.post(`/projects/any/requirements/${reqId}/response`, { response: responseText });
+    },
+
+    // Project Management
+    deleteProject: async (projectId: string): Promise<void> => {
+        await apiClient.delete(`/projects/${projectId}`);
+    },
+
+    updateProjectStatus: async (projectId: string, status: string): Promise<void> => {
+        await apiClient.patch(`/projects/${projectId}/status`, { status });
+    },
+
+    addProjectMember: async (projectId: string, email: string): Promise<void> => {
+        await apiClient.post(`/projects/${projectId}/members`, { email });
     }
 };

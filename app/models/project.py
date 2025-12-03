@@ -10,6 +10,8 @@ class Project(Base):
     workspace = Column(String, nullable=False)
     group_id = Column(UUID(as_uuid=True), ForeignKey("group.id", ondelete="CASCADE"), nullable=True)
     name = Column(String, nullable=False)
+    description = Column(Text, nullable=True) # Added description
+    deadline = Column(TIMESTAMP, nullable=True) # Added deadline
     industry = Column(String, nullable=True)
     rfp_type = Column(String, nullable=True)
     evaluation_criteria = Column(JSONB, nullable=True)
@@ -17,3 +19,4 @@ class Project(Base):
     prohibited_phrases = Column(JSONB, nullable=True)
     created_at = Column(TIMESTAMP, server_default=text("now()"))
     owner_id = Column(String, nullable=True)
+    status = Column(String, default="active", nullable=False)

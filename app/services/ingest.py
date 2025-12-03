@@ -5,18 +5,25 @@ from app.models.document import Document
 from app.utils.pdf_hwp_parser import parse_pdf, parse_hwp
 from app.utils.semantic_hash import compute_sha256
 
-def detect_conflicts(db: Session, file_hash: str, filename: str, workspace: str) -> Optional[Dict[str, Any]]:
+def detect_conflicts(db: Session, file_hash: str, filename: str, workspace: str, group_id: Optional[uuid.UUID] = None) -> Optional[Dict[str, Any]]:
     """
     Check for conflicts:
     1. Exact Duplicate: Same Hash + Same Name
     2. Content Conflict: Same Hash + Diff Name
     3. Version Conflict: Diff Hash + Same Name
     """
+    # Base query
+    query = db.query(Document).filter(Document.workspace == workspace)
+    
+    # If group_id is provided, scope to that group. 
+    # If None (Source Docs), scope to None.
+    if group_id:
+        query = query.filter(Document.group_id == group_id)
+    else:
+        query = query.filter(Document.group_id.is_(None))
+
     # Check by Hash
-    hash_match = db.query(Document).filter(
-        Document.workspace == workspace,
-        Document.sha256 == file_hash
-    ).first()
+    hash_match = query.filter(Document.sha256 == file_hash).first()
 
     if hash_match:
         if hash_match.title == filename:
@@ -35,10 +42,7 @@ def detect_conflicts(db: Session, file_hash: str, filename: str, workspace: str)
             }
 
     # Check by Name (only if hash didn't match)
-    name_match = db.query(Document).filter(
-        Document.workspace == workspace,
-        Document.title == filename
-    ).first()
+    name_match = query.filter(Document.title == filename).first()
 
     if name_match:
         return {
@@ -66,17 +70,20 @@ def resolve_conflict(
         return {"status": "ignored", "message": "User selected to keep existing file."}
     
     elif resolution == "keep_new":
-        # Overwrite or Version Up? 
-        # For MVP, we'll "Version Up" by appending timestamp or v2 to the OLD file, 
-        # OR just add the NEW file as the "latest" (if we had version control).
-        # Since we don't have real version control, we will Rename the NEW file to avoid DB constraint if any,
-        # OR if we assume unique(workspace, title), we must rename/delete the old one.
-        # Let's assume we want to Replace the content. But Document model is append-only usually.
-        # Strategy: Delete old doc (or archive) and insert new one.
+        # ... (logic remains similar, but scoped)
         
-        existing = db.query(Document).filter(Document.workspace == workspace, Document.title == filename).first()
+        # Convert group_id to UUID for query
+        gid = uuid.UUID(group_id) if group_id else None
+        
+        query = db.query(Document).filter(Document.workspace == workspace, Document.title == filename)
+        if gid:
+            query = query.filter(Document.group_id == gid)
+        else:
+            query = query.filter(Document.group_id.is_(None))
+            
+        existing = query.first()
         if existing:
-            db.delete(existing) # Simple replacement for MVP
+            db.delete(existing) 
             db.commit()
             
         return ingest_document(db, file_bytes, filename, workspace, group_id)
@@ -107,8 +114,11 @@ def ingest_document(
     # 1. Compute Hash
     file_hash = compute_sha256(file_bytes)
 
+    # Convert group_id string to UUID early for detection
+    gid = uuid.UUID(group_id) if group_id else None
+
     # 2. Detect Conflicts
-    conflict = detect_conflicts(db, file_hash, filename, workspace)
+    conflict = detect_conflicts(db, file_hash, filename, workspace, gid)
     if conflict:
         return {
             "status": "conflict",
@@ -119,43 +129,59 @@ def ingest_document(
     # 3. Parse Document
     parse_result = {}
     lower_filename = filename.lower()
-    if lower_filename.endswith(".pdf"):
-        parse_result = parse_pdf(file_bytes)
-    elif lower_filename.endswith(".hwp"):
-        parse_result = parse_hwp(file_bytes)
-    else:
-        # Fallback for text/md or unsupported
-        try:
-            text_content = file_bytes.decode("utf-8")
-            parse_result = {"text": text_content, "pages": []}
-        except UnicodeDecodeError:
-             parse_result = {"text": "", "error": "Unsupported file format or decoding failed"}
+    
+    try:
+        if lower_filename.endswith(".pdf"):
+            parse_result = parse_pdf(file_bytes)
+        elif lower_filename.endswith(".hwp"):
+            parse_result = parse_hwp(file_bytes)
+        else:
+            # Fallback for text/md or unsupported
+            try:
+                text_content = file_bytes.decode("utf-8")
+                parse_result = {"text": text_content, "pages": []}
+            except UnicodeDecodeError:
+                 parse_result = {"text": "", "error": "Unsupported file format or decoding failed"}
+    except Exception as e:
+        print(f"Parsing failed for {filename}: {e}")
+        parse_result = {"text": "", "error": f"Parsing failed: {str(e)}"}
 
     # 4. Save to DB
-    # Convert group_id string to UUID if present
-    gid = uuid.UUID(group_id) if group_id else None
+    print(f"[ingest] Saving to DB: {filename}, group_id={group_id}")
+    try:
+        # Convert group_id string to UUID if present
+        gid = uuid.UUID(group_id) if group_id else None
 
-    # Save file locally for MVP (Shredder needs it)
-    import os
-    upload_dir = "uploads"
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir)
-    
-    local_path = os.path.join(upload_dir, filename)
-    with open(local_path, "wb") as f:
-        f.write(file_bytes)
+        # Save file locally for MVP (Shredder needs it)
+        import os
+        upload_dir = "uploads"
+        if not os.path.exists(upload_dir):
+            os.makedirs(upload_dir)
+        
+        local_path = os.path.join(upload_dir, filename)
+        with open(local_path, "wb") as f:
+            f.write(file_bytes)
+        
+        print(f"[ingest] File saved locally: {local_path}")
 
-    new_doc = Document(
-        id=uuid.uuid4(),
-        workspace=workspace,
-        group_id=gid,
-        title=filename,
-        s3_key_raw=f"file://{os.path.abspath(local_path)}", # Point to local file
-        sha256=file_hash
-    )
-    db.add(new_doc)
-    db.commit()
-    db.refresh(new_doc)
+        new_doc = Document(
+            id=uuid.uuid4(),
+            workspace=workspace,
+            group_id=gid,
+            title=filename,
+            s3_key_raw=f"file://{os.path.abspath(local_path)}", # Point to local file
+            sha256=file_hash,
+            is_folder=False, # Explicitly set for files
+            parent_id=None
+        )
+        db.add(new_doc)
+        db.commit()
+        db.refresh(new_doc)
+        print(f"[ingest] DB commit successful: {new_doc.id}")
+    except Exception as e:
+        print(f"[ingest] DB Save Failed: {e}")
+        db.rollback()
+        raise e
 
     return {
         "status": "success",

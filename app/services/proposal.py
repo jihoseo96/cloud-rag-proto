@@ -13,6 +13,10 @@ def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
     Updates the 'linked_answer_cards' field in RFPRequirement.
     """
     project_uuid = uuid.UUID(project_id)
+    project = db.get(Project, project_uuid)
+    if not project:
+        raise ValueError(f"Project {project_id} not found")
+        
     requirements = db.query(RFPRequirement).filter(RFPRequirement.project_id == project_uuid).all()
     
     from app.services.embed import embed_texts
@@ -45,8 +49,14 @@ def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
         best_match = None
         if results:
             top_result = results[0]
-            if top_result["source_type"] == "answer" and top_result["final_score"] > 0.85:
+            # Increased threshold to 0.9 to avoid weak matches
+            if top_result["source_type"] == "answer" and top_result["final_score"] > 0.9:
                 best_match = top_result["answer_id"]
+                print(f"[Proposal] Matched existing answer: {best_match} (Score: {top_result['final_score']})")
+            else:
+                print(f"[Proposal] Top result score {top_result['final_score']} below threshold 0.9 or not an answer.")
+        else:
+            print("[Proposal] No search results found.")
         
         if best_match:
             req.linked_answer_cards = [str(best_match)]
@@ -54,7 +64,8 @@ def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
             mapped_count += 1
         else:
             # 3. Generate new answer if no good match
-            context_text = "\n".join([r["text"] for r in results])
+            print(f"[Proposal] Generating answer for requirement: {req.requirement_text[:30]}...")
+            context_text = "\n".join([r["text"] for r in results]) if results else "No context available."
             
             prompt = f"""
             Requirement: {req.requirement_text}
@@ -81,12 +92,14 @@ def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
                     answer=generated_answer,
                     created_by="AI_Generator",
                     status="draft",
-                    anchors=[{"text": r["text"], "score": r["final_score"]} for r in results]
+                    anchors=[{"text": r["text"], "score": r["final_score"]} for r in results] if results else [],
+                    group_id=project.group_id # Link to project's group if any
                 )
                 
                 req.linked_answer_cards = [str(new_card.id)]
-                req.anchor_confidence = 0.5 # Lower confidence for generated
+                req.anchor_confidence = 0.0 # Zero confidence for generated (User Request)
                 mapped_count += 1
+                print(f"[Proposal] Generated answer created: {new_card.id}")
             except Exception as e:
                 print(f"Generation failed: {e}")
     

@@ -75,8 +75,9 @@ def search_chunks(
     for chunk, distance in ans_query.all():
         # Boost score if prefer_team_answer
         score = 1 - distance
-        if prefer_team_answer:
-            score += 0.1 # Simple boost
+        # Removed artificial boost to ensure accurate confidence scores
+        # if prefer_team_answer:
+        #     score += 0.1
             
         ans_results.append({
             "source_type": "answer",

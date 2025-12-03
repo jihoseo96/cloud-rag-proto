@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.models.db import SessionLocal
 from app.services.shredder import calculate_shredding_cost, shred_rfp
+from app.services.s3 import get_pdf_bytes
+from app.services.indexer import extract_text_pages
 from pydantic import BaseModel
 from typing import Optional
 
@@ -52,16 +54,24 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
     full_text = ""
     for doc in docs:
         # Check if s3_key_raw points to local file
-        if doc.s3_key_raw.startswith("file://"):
+        # Check if s3_key_raw points to local file
+        if doc.s3_key_raw and doc.s3_key_raw.startswith("file://"):
             path = doc.s3_key_raw.replace("file://", "")
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8", errors="ignore") as f:
                     full_text += f.read() + "\n\n"
             else:
                 print(f"File not found: {path}")
+        elif doc.s3_key_raw:
+            # S3 Handling
+            try:
+                pdf_bytes = get_pdf_bytes(doc.s3_key_raw)
+                pages = extract_text_pages(pdf_bytes)
+                for page in pages:
+                    full_text += page["text"] + "\n\n"
+            except Exception as e:
+                print(f"Failed to process S3 file {doc.s3_key_raw}: {e}")
         else:
-            # Fallback for MVP: maybe it's just a filename in local dir?
-            # Or if we didn't update s3_key_raw correctly in previous steps
             pass
     
     if not full_text.strip():

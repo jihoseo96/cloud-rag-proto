@@ -20,8 +20,10 @@ export interface Project {
   createdAt: Date;
   ownerId: string;
   status: 'draft' | 'active' | 'completed' | 'archived';
-  dueDate?: Date;
+  deadline?: string; // Changed from dueDate to match backend, string for ISO date
+  description?: string; // Added
   complianceCoverage?: number; // 0-100%
+
   // Dashboard Stats
   progress?: number;
   cardsGenerated?: number;
@@ -40,6 +42,18 @@ export interface RFPRequirement {
   anchorConfidence: number; // 0-1
   priority: 'high' | 'medium' | 'low';
   section?: string;
+}
+
+export interface RequirementView {
+  id: string;
+  requirement: string;
+  requirementFull: string;
+  status: 'approved' | 'pending' | 'none';
+  aiSuggestion: string;
+  aiSuggestionFull: string;
+  score: number;
+  sources: Array<{ doc: string; page: number }>;
+  pastProposals: Array<{ doc: string; location: string; fileType: string }>;
 }
 
 export interface Anchor {

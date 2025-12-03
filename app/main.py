@@ -121,6 +121,15 @@ def run_safe_migration():
             if result.fetchone() is None:
                 logger.info("Migration: Adding 'facts' column to answer_card")
                 conn.execute(text("ALTER TABLE answer_card ADD COLUMN facts JSONB"))
+
+            # Check for 'project_id' column
+            result = conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='answer_card' AND column_name='project_id'"
+            ))
+            if result.fetchone() is None:
+                logger.info("Migration: Adding 'project_id' column to answer_card")
+                conn.execute(text("ALTER TABLE answer_card ADD COLUMN project_id UUID"))
             
             conn.commit()
     except Exception as e:

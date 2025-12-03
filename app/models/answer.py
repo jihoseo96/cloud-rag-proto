@@ -11,6 +11,7 @@ class AnswerCard(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace = Column(String, nullable=False)
+    project_id = Column(UUID(as_uuid=True), nullable=True) # Added project_id
     group_id = Column(UUID(as_uuid=True), ForeignKey("group.id", ondelete="CASCADE"), nullable=True)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)

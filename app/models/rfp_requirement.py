@@ -13,4 +13,5 @@ class RFPRequirement(Base):
     compliance_level = Column(String, nullable=True) # YES | PARTIAL | NO
     linked_answer_cards = Column(JSONB, nullable=True) # List of UUIDs
     anchor_confidence = Column(Float, nullable=True)
+    status = Column(String, default="pending", nullable=False)
     created_at = Column(TIMESTAMP, server_default=text("now()"))

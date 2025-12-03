@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { EnterpriseLayout } from '../components/EnterpriseLayout';
+
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
@@ -113,124 +113,124 @@ function AdminTeamPage() {
   );
 
   return (
-    <EnterpriseLayout>
-      <div className="h-full flex flex-col bg-white">
-        {/* Header */}
-        <div className="h-16 border-b border-[#E0E0E0] flex items-center justify-between px-6">
-          <div>
-            <h1 className="text-[1.125rem] font-semibold text-[#1F1F1F]">Team Members</h1>
-            <p className="text-[0.75rem] text-[#9AA0A6] mt-0.5">
-              워크스페이스 멤버 및 권한 관리
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex items-center gap-2 bg-[#F7F7F8] px-3 py-1.5 rounded-md border border-[#E0E0E0]">
-              <Mail className="h-4 w-4 text-[#9AA0A6]" />
-              <Input
-                placeholder="이메일 주소 입력"
-                className="h-7 w-48 border-none bg-transparent focus-visible:ring-0 px-0 text-[0.8125rem]"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-              />
-            </div>
-            <Button size="sm" onClick={handleInvite} disabled={isInviting}>
-              {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4 mr-1.5" />}
-              초대하기
-            </Button>
-          </div>
-        </div>
 
-        {/* Search Bar */}
-        <div className="h-14 border-b border-[#E0E0E0] flex items-center px-6 bg-[#F7F7F8]">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9AA0A6]" />
+    <div className="h-full flex flex-col bg-white">
+      {/* Header */}
+      <div className="h-16 border-b border-[#E0E0E0] flex items-center justify-between px-6">
+        <div>
+          <h1 className="text-[1.125rem] font-semibold text-[#1F1F1F]">Team Members</h1>
+          <p className="text-[0.75rem] text-[#9AA0A6] mt-0.5">
+            워크스페이스 멤버 및 권한 관리
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex items-center gap-2 bg-[#F7F7F8] px-3 py-1.5 rounded-md border border-[#E0E0E0]">
+            <Mail className="h-4 w-4 text-[#9AA0A6]" />
             <Input
-              placeholder="이름, 이메일로 검색"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 bg-white"
+              placeholder="이메일 주소 입력"
+              className="h-7 w-48 border-none bg-transparent focus-visible:ring-0 px-0 text-[0.8125rem]"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
             />
           </div>
+          <Button size="sm" onClick={handleInvite} disabled={isInviting}>
+            {isInviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4 mr-1.5" />}
+            초대하기
+          </Button>
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-5xl mx-auto">
-            <div className="bg-white border border-[#E0E0E0] rounded-lg overflow-hidden">
-              <table className="w-full text-left text-[0.875rem]">
-                <thead className="bg-[#F7F7F8] border-b border-[#E0E0E0]">
+      {/* Search Bar */}
+      <div className="h-14 border-b border-[#E0E0E0] flex items-center px-6 bg-[#F7F7F8]">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9AA0A6]" />
+          <Input
+            placeholder="이름, 이메일로 검색"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9 bg-white"
+          />
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="bg-white border border-[#E0E0E0] rounded-lg overflow-hidden">
+            <table className="w-full text-left text-[0.875rem]">
+              <thead className="bg-[#F7F7F8] border-b border-[#E0E0E0]">
+                <tr>
+                  <th className="px-6 py-3 font-medium text-[#424242]">이름 / 이메일</th>
+                  <th className="px-6 py-3 font-medium text-[#424242]">권한</th>
+                  <th className="px-6 py-3 font-medium text-[#424242]">상태</th>
+                  <th className="px-6 py-3 font-medium text-[#424242]">가입일</th>
+                  <th className="px-6 py-3 font-medium text-[#424242] text-right">관리</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E0E0E0]">
+                {isLoading ? (
                   <tr>
-                    <th className="px-6 py-3 font-medium text-[#424242]">이름 / 이메일</th>
-                    <th className="px-6 py-3 font-medium text-[#424242]">권한</th>
-                    <th className="px-6 py-3 font-medium text-[#424242]">상태</th>
-                    <th className="px-6 py-3 font-medium text-[#424242]">가입일</th>
-                    <th className="px-6 py-3 font-medium text-[#424242] text-right">관리</th>
+                    <td colSpan={5} className="py-12 text-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-[#0B57D0] mx-auto" />
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E0E0E0]">
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-[#0B57D0] mx-auto" />
+                ) : filteredMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-muted-foreground">
+                      멤버가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMembers.map((member) => (
+                    <tr key={member.id} className="hover:bg-[#F7F7F8] transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#0B57D0]/10 flex items-center justify-center text-[#0B57D0] font-semibold text-xs">
+                            {member.name.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-medium text-[#1F1F1F]">{member.name}</div>
+                            <div className="text-[0.75rem] text-[#9AA0A6]">{member.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {getRoleBadge(member.role)}
+                      </td>
+                      <td className="px-6 py-4">
+                        {getStatusBadge(member.status)}
+                      </td>
+                      <td className="px-6 py-4 text-[#424242] font-mono text-[0.8125rem]">
+                        {new Date(member.joinedAt).toLocaleDateString('ko-KR')}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleRoleUpdate(member.id, member.role === 'admin' ? 'member' : 'admin')}
+                            className="p-1.5 text-[#9AA0A6] hover:text-[#0B57D0] hover:bg-[#0B57D0]/10 rounded transition-colors"
+                            title="Change Role"
+                          >
+                            <Shield className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleRemove(member.id)}
+                            className="p-1.5 text-[#9AA0A6] hover:text-[#D0362D] hover:bg-[#D0362D]/10 rounded transition-colors"
+                            title="Remove Member"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : filteredMembers.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-muted-foreground">
-                        멤버가 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredMembers.map((member) => (
-                      <tr key={member.id} className="hover:bg-[#F7F7F8] transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-[#0B57D0]/10 flex items-center justify-center text-[#0B57D0] font-semibold text-xs">
-                              {member.name.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="font-medium text-[#1F1F1F]">{member.name}</div>
-                              <div className="text-[0.75rem] text-[#9AA0A6]">{member.email}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {getRoleBadge(member.role)}
-                        </td>
-                        <td className="px-6 py-4">
-                          {getStatusBadge(member.status)}
-                        </td>
-                        <td className="px-6 py-4 text-[#424242] font-mono text-[0.8125rem]">
-                          {new Date(member.joinedAt).toLocaleDateString('ko-KR')}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleRoleUpdate(member.id, member.role === 'admin' ? 'member' : 'admin')}
-                              className="p-1.5 text-[#9AA0A6] hover:text-[#0B57D0] hover:bg-[#0B57D0]/10 rounded transition-colors"
-                              title="Change Role"
-                            >
-                              <Shield className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleRemove(member.id)}
-                              className="p-1.5 text-[#9AA0A6] hover:text-[#D0362D] hover:bg-[#D0362D]/10 rounded transition-colors"
-                              title="Remove Member"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
-    </EnterpriseLayout>
+    </div>
+
   );
 }
 

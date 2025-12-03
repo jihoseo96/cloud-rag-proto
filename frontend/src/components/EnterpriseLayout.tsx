@@ -3,7 +3,7 @@
  * High-density professional layout for Enterprise RFP OS
  */
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Database,
@@ -16,39 +16,58 @@ import {
   ChevronRight,
   Archive,
   BookOpen,
-  FileStack
+  FileStack,
+  MoreHorizontal,
+  Trash2,
+  CheckCircle2
 } from 'lucide-react';
 import { Button } from './ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from './ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import { projectApi } from '../api/project';
+import { Project } from '../types';
 
 interface EnterpriseLayoutProps {
   children: ReactNode;
   projectId?: string;
 }
 
-type Project = {
-  id: string;
-  name: string;
-  status: 'active' | 'completed';
-};
-
 export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [completedExpanded, setCompletedExpanded] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
 
-  // Mock projects list with status
-  const allProjects: Project[] = [
-    { id: 'gov-cloud-rfp-2024', name: '정부 클라우드 RFP 2024', status: 'active' },
-    { id: 'healthcare-system', name: '의료 시스템 통합', status: 'active' },
-    { id: 'fintech-integration', name: '핀테크 플랫폼 현대화', status: 'active' },
-    { id: 'smart-city-2024', name: '스마트시티 플랫폼', status: 'completed' },
-    { id: 'defense-security', name: '국방 보안 시스템', status: 'completed' },
-    { id: 'blockchain-2023', name: '블록체인 금융 플랫폼', status: 'completed' },
-  ];
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const data = await projectApi.getProjects();
+        setProjects(data);
+      } catch (error) {
+        console.error("Failed to fetch projects", error);
+      }
+    };
+    fetchProjects();
+  }, []);
 
-  const activeProjects = allProjects.filter(p => p.status === 'active');
-  const completedProjects = allProjects.filter(p => p.status === 'completed');
+  const activeProjects = projects.filter(p => p.status === 'active' || !p.status);
+  const completedProjects = projects.filter(p => p.status === 'completed');
 
   const isActive = (path: string) => {
     if (path === '/admin') {
@@ -60,38 +79,45 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
     return location.pathname === path;
   };
 
-  const renderProject = (project: Project) => {
-    const active = isActive(`/project/${project.id}`);
-    const firstLetter = project.name.charAt(0).toUpperCase();
+  // 프로젝트 삭제 핸들러
+  const handleDeleteProject = async () => {
+    if (!selectedProject) return;
 
-    return (
-      <Link
-        key={project.id}
-        to={`/project/${project.id}/workspace`}
-        className={`
-          flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-[0.8125rem] font-medium
-          ${active
-            ? 'bg-[#D3E3FD] text-[#0B57D0]'
-            : 'text-[#424242] hover:bg-[#E8EAED]'
-          }
-        `}
-        title={project.name}
-      >
-        {sidebarCollapsed ? (
-          <div className={`
-            h-7 w-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold flex-shrink-0
-            ${active
-              ? 'bg-[#0B57D0] text-white'
-              : 'bg-[#E8EAED] text-[#424242]'
-            }
-          `}>
-            {firstLetter}
-          </div>
-        ) : (
-          <span className="truncate">{project.name}</span>
-        )}
-      </Link>
-    );
+    try {
+      await projectApi.deleteProject(selectedProject.id);
+
+      // 로컬 State에서 제거
+      setProjects(projects.filter(p => p.id !== selectedProject.id));
+      setDeleteDialogOpen(false);
+      setSelectedProject(null);
+
+      // 삭제된 프로젝트 페이지에 있었다면 홈으로 이동
+      if (location.pathname.includes(selectedProject.id)) {
+        navigate('/knowledge/answers');
+      }
+    } catch (error) {
+      console.error("Failed to delete project", error);
+    }
+  };
+
+  // 프로젝트 완료 핸들러
+  const handleCompleteProject = async () => {
+    if (!selectedProject) return;
+
+    try {
+      await projectApi.updateProjectStatus(selectedProject.id, 'completed');
+
+      // 상태를 completed로 변경
+      setProjects(projects.map(p =>
+        p.id === selectedProject.id
+          ? { ...p, status: 'completed' as const }
+          : p
+      ));
+      setCompleteDialogOpen(false);
+      setSelectedProject(null);
+    } catch (error) {
+      console.error("Failed to complete project", error);
+    }
   };
 
   return (
@@ -202,36 +228,87 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
               const firstLetter = project.name.charAt(0).toUpperCase();
 
               return (
-                <Link
+                <div
                   key={project.id}
-                  to={`/project/${project.id}/workspace`}
-                  className={`
-                    flex items-center gap-3 py-2 rounded-lg transition-colors text-[0.8125rem]
-                    ${sidebarCollapsed ? 'px-3' : 'px-3 ml-2'}
-                    ${active
-                      ? 'bg-[#D3E3FD] text-[#0B57D0] font-medium'
-                      : 'text-[#424242] hover:bg-[#E8EAED]'
-                    }
-                  `}
-                  title={project.name}
+                  className="group relative"
                 >
-                  {sidebarCollapsed ? (
-                    <div className={`
-                      h-7 w-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold flex-shrink-0
+                  <Link
+                    to={`/project/${project.id}/workspace`}
+                    className={`
+                      flex items-center gap-3 py-2 rounded-lg transition-colors text-[0.8125rem]
+                      ${sidebarCollapsed ? 'px-3' : 'px-3 ml-2'}
                       ${active
-                        ? 'bg-[#0B57D0] text-white'
-                        : 'bg-[#E8EAED] text-[#424242]'
+                        ? 'bg-[#D3E3FD] text-[#0B57D0] font-medium'
+                        : 'text-[#424242] hover:bg-[#E8EAED]'
                       }
-                    `}>
-                      {firstLetter}
+                    `}
+                    title={project.name}
+                  >
+                    {sidebarCollapsed ? (
+                      <div className={`
+                        h-7 w-7 rounded-full flex items-center justify-center text-[0.75rem] font-semibold flex-shrink-0
+                        ${active
+                          ? 'bg-[#0B57D0] text-white'
+                          : 'bg-[#E8EAED] text-[#424242]'
+                        }
+                      `}>
+                        {firstLetter}
+                      </div>
+                    ) : (
+                      <>
+                        <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${active ? 'bg-[#0B57D0]' : 'bg-[#9AA0A6]'}`} />
+                        <span className="truncate flex-1">{project.name}</span>
+                      </>
+                    )}
+                  </Link>
+
+                  {/* Context Menu Button - visible on hover */}
+                  {!sidebarCollapsed && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 hover:bg-[#E8EAED]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                          >
+                            <MoreHorizontal className="h-4 w-4 text-[#424242]" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedProject(project);
+                              setCompleteDialogOpen(true);
+                            }}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-2 text-[#0E7A4E]" />
+                            프로젝트 완료
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-[#D0362D]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedProject(project);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            프로젝트 삭제
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                  ) : (
-                    <>
-                      <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${active ? 'bg-[#0B57D0]' : 'bg-[#9AA0A6]'}`} />
-                      <span className="truncate">{project.name}</span>
-                    </>
                   )}
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -329,6 +406,91 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
       <main className="flex-1 overflow-hidden">
         {children}
       </main>
+
+      {/* Delete Project Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-[#D0362D]" />
+              프로젝트 삭제
+            </DialogTitle>
+            <DialogDescription>
+              이 작업은 되돌릴 수 없습니다. 프로젝트와 관련된 모든 데이터가 영구적으로 삭제됩니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProject && (
+            <div className="py-4">
+              <div className="bg-[#FCE8E6] border border-[#D0362D]/30 rounded-lg p-3">
+                <div className="text-[0.75rem] text-[#D0362D] mb-2 font-semibold">
+                  삭제할 프로젝트
+                </div>
+                <div className="text-[0.875rem] text-[#1F1F1F] font-medium">
+                  {selectedProject.name}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteProject}
+            >
+              영구 삭제
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Complete Project Dialog */}
+      <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-[#0E7A4E]" />
+              프로젝트 완료
+            </DialogTitle>
+            <DialogDescription>
+              프로젝트를 완료 처리하시겠습니까? 완료된 프로젝트는 "완료된 프로젝트" 폴더로 이동됩니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProject && (
+            <div className="py-4">
+              <div className="bg-[#F7F7F8] rounded-lg p-3">
+                <div className="text-[0.75rem] text-[#9AA0A6] mb-2">
+                  프로젝트 정보
+                </div>
+                <div className="text-[0.875rem] text-[#1F1F1F] font-medium">
+                  {selectedProject.name}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setCompleteDialogOpen(false)}
+            >
+              취소
+            </Button>
+            <Button
+              onClick={handleCompleteProject}
+            >
+              완료 처리
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

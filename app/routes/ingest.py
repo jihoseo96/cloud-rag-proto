@@ -32,7 +32,7 @@ async def upload_and_ingest(
         import uuid
         try:
             proj = db.get(Project, uuid.UUID(project_id))
-            if proj:
+            if proj and proj.group_id:
                 group_id = str(proj.group_id)
         except:
             pass

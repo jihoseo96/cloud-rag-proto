@@ -41,5 +41,31 @@ if __name__ == "__main__":
     
     # Make s3_key_raw nullable
     make_column_nullable(engine, "document", "s3_key_raw")
+
+    # Add status to project
+    add_column_if_not_exists(engine, "project", "status", "TEXT DEFAULT 'active' NOT NULL")
+    
+    # Add deadline and description to project
+    add_column_if_not_exists(engine, "project", "deadline", "TIMESTAMP")
+    add_column_if_not_exists(engine, "project", "description", "TEXT")
+
+    # Add status to rfp_requirement
+    add_column_if_not_exists(engine, "rfp_requirement", "status", "TEXT DEFAULT 'pending' NOT NULL")
+
+    # Add project_id to answer_card
+    add_column_if_not_exists(engine, "answer_card", "project_id", "UUID")
+
+    # Drop unique constraint on document (workspace, sha256) if exists
+    # We do this using raw SQL since SQLAlchemy reflection can be tricky with constraints
+    try:
+        with engine.connect() as conn:
+            # Try dropping as constraint
+            conn.execute(text("ALTER TABLE document DROP CONSTRAINT IF EXISTS uq_document_workspace_sha256"))
+            # Try dropping as index
+            conn.execute(text("DROP INDEX IF EXISTS uq_document_workspace_sha256"))
+            conn.commit()
+            print("Dropped constraint/index uq_document_workspace_sha256")
+    except Exception as e:
+        print(f"Warning: Could not drop constraint/index: {e}")
     
     print("Database schema updated successfully.")

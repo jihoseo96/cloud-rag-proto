@@ -134,6 +134,19 @@ def get_anchor_health(db: Session = Depends(get_db)):
         "memoryUsage": 60
     }
 
+@router.get("/system/status")
+def get_system_status(db: Session = Depends(get_db)):
+    """
+    Mock system status for dashboard.
+    """
+    return {
+        "status": "healthy",
+        "uptime": 3600 * 24 * 10,
+        "version": "1.0.0",
+        "cpuUsage": 45,
+        "memoryUsage": 60
+    }
+
 class GuardrailsBody(BaseModel):
     prohibited_words: List[dict]
     risk_policy: dict
