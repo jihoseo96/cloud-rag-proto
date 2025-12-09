@@ -1,0 +1,11 @@
+{
+  "summary": "The project is about building a cloud system that includes authentication capabilities based on OAuth2.",
+  "deadline": null,
+  "requirements": [
+    {
+      "requirement_text": "The system must support OAuth2.",
+      "requirement_type": "security",
+      "compliance_level": "YES"
+    }
+  ]
+}

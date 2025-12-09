@@ -5,7 +5,15 @@ from sqlalchemy.orm import Session
 from app.models.project import Project
 from app.models.rfp_requirement import RFPRequirement
 from app.models.answer import AnswerCard
-from app.services.search import search_chunks # Placeholder for now, or implement vector search here
+from app.models.answer import AnswerCard
+from app.services.search import search_chunks
+from app.services.openai_client import OpenAIClient
+from app.services.answers import create_answer_card # If needed
+from app.utils.debug_logger import log_info, log_error
+import os
+
+# Initialize Client
+openai_client = OpenAIClient()
 
 def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
     """
@@ -19,32 +27,41 @@ def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
         
     requirements = db.query(RFPRequirement).filter(RFPRequirement.project_id == project_uuid).all()
     
-    from app.services.embed import embed_texts
-    from app.services.search import search_chunks
-    from app.services.answers import create_answer_card
-    from openai import OpenAI
-    import os
-    
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    requirements = db.query(RFPRequirement).filter(RFPRequirement.project_id == project_uuid).all()
     
     mapped_count = 0
+    log_info(f"[Proposal] Starting mapping for {len(requirements)} requirements.")
     
-    for req in requirements:
-        # 1. Embed requirement
+    # Batch Embedding Optimization
+    req_texts = [req.requirement_text for req in requirements]
+    embeddings = []
+    if req_texts:
         try:
-            qvec = embed_texts([req.requirement_text])[0]
-        except:
-            continue
-            
+            log_info(f"[Proposal] Batch embedding {len(req_texts)} requirements...")
+            embeddings = openai_client.get_embeddings(req_texts)
+        except Exception as e:
+            log_error(f"[Proposal] Batch embedding failed: {e}")
+            # Fallback or abort? For now, abort mapping for this batch is safer than crashing or partials without vectors
+            return {
+                "total_requirements": len(requirements),
+                "mapped_requirements": 0,
+                "error": str(e)
+            }
+
+    for req, qvec in zip(requirements, embeddings):
         # 2. Search for existing answers
-        results = search_chunks(
-            db=db,
-            qvec=qvec,
-            qtext=req.requirement_text,
-            top_k=3,
-            prefer_team_answer=True,
-            workspace="personal" # MVP hardcoded
-        )
+        try:
+            results = search_chunks(
+                db=db,
+                qvec=qvec,
+                qtext=req.requirement_text,
+                top_k=3,
+                prefer_team_answer=True,
+                workspace="personal" # MVP hardcoded
+            )
+        except Exception as e:
+            log_error(f"[Proposal] Search failed for req {req.id}: {e}")
+            results = []
         
         best_match = None
         if results:
@@ -52,57 +69,20 @@ def map_requirements_to_answers(db: Session, project_id: str) -> Dict[str, Any]:
             # Increased threshold to 0.9 to avoid weak matches
             if top_result["source_type"] == "answer" and top_result["final_score"] > 0.9:
                 best_match = top_result["answer_id"]
-                print(f"[Proposal] Matched existing answer: {best_match} (Score: {top_result['final_score']})")
+                log_info(f"[Proposal] Matched existing answer: {best_match} (Score: {top_result['final_score']})")
             else:
-                print(f"[Proposal] Top result score {top_result['final_score']} below threshold 0.9 or not an answer.")
+                log_info(f"[Proposal] Top result score {top_result['final_score']} below threshold 0.9 or not an answer.")
         else:
-            print("[Proposal] No search results found.")
+            log_info("[Proposal] No search results found.")
         
         if best_match:
             req.linked_answer_cards = [str(best_match)]
             req.anchor_confidence = results[0]["final_score"]
             mapped_count += 1
         else:
-            # 3. Generate new answer if no good match
-            print(f"[Proposal] Generating answer for requirement: {req.requirement_text[:30]}...")
-            context_text = "\n".join([r["text"] for r in results]) if results else "No context available."
-            
-            prompt = f"""
-            Requirement: {req.requirement_text}
-            
-            Context:
-            {context_text}
-            
-            Based on the context, draft a response to the requirement. 
-            If the context doesn't contain enough info, say "Requires manual input".
-            """
-            
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                generated_answer = response.choices[0].message.content
-                
-                # Create draft card
-                new_card = create_answer_card(
-                    db=db,
-                    workspace="personal",
-                    question=req.requirement_text,
-                    answer=generated_answer,
-                    created_by="AI_Generator",
-                    status="draft",
-                    anchors=[{"text": r["text"], "score": r["final_score"]} for r in results] if results else [],
-                    group_id=project.group_id # Link to project's group if any
-                )
-                
-                req.linked_answer_cards = [str(new_card.id)]
-                req.anchor_confidence = 0.0 # Zero confidence for generated (User Request)
-                mapped_count += 1
-                print(f"[Proposal] Generated answer created: {new_card.id}")
-            except Exception as e:
-                print(f"Generation failed: {e}")
-    
+            # 3. No match found - Leave as pending
+            log_info(f"[Proposal] No good match for req {req.id}. Leaving as pending.")
+
     db.commit()
     return {
         "total_requirements": len(requirements),

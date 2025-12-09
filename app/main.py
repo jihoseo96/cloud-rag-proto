@@ -93,7 +93,27 @@ def run_safe_migration():
             # Check if answer_card table exists
             result = conn.execute(text("SELECT to_regclass('public.answer_card')"))
             if result.scalar() is None:
-                return # Table doesn't exist, create_all will handle it
+                pass # Table doesn't exist, create_all will handle it
+            else:
+                # AnswerCard exists, check for missing columns - AnswerCard
+                
+                # Check for 'origin' column (AnswerCard)
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='answer_card' AND column_name='origin'"
+                ))
+                if result.fetchone() is None:
+                    logger.info("Migration: Adding 'origin' column to answer_card")
+                    conn.execute(text("ALTER TABLE answer_card ADD COLUMN origin VARCHAR"))
+
+                # Check for 'status' column (AnswerCard) -- might already exist but verify
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='answer_card' AND column_name='status'"
+                ))
+                if result.fetchone() is None:
+                    logger.info("Migration: Adding 'status' column to answer_card")
+                    conn.execute(text("ALTER TABLE answer_card ADD COLUMN status VARCHAR DEFAULT 'active'"))
 
             # Check for 'anchors' column
             result = conn.execute(text(
@@ -129,7 +149,47 @@ def run_safe_migration():
             ))
             if result.fetchone() is None:
                 logger.info("Migration: Adding 'project_id' column to answer_card")
+                logger.info("Migration: Adding 'project_id' column to answer_card")
                 conn.execute(text("ALTER TABLE answer_card ADD COLUMN project_id UUID"))
+
+            # Check Document Table
+            result = conn.execute(text("SELECT to_regclass('public.document')"))
+            if result.scalar() is not None:
+                # Check for 'vertex_sync_status' column
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='document' AND column_name='vertex_sync_status'"
+                ))
+                if result.fetchone() is None:
+                    logger.info("Migration: Adding 'vertex_sync_status' column to document")
+                    conn.execute(text("ALTER TABLE document ADD COLUMN vertex_sync_status VARCHAR DEFAULT 'PENDING'"))
+
+                # Check for 'last_vertex_sync_at' column
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='document' AND column_name='last_vertex_sync_at'"
+                ))
+                if result.fetchone() is None:
+                    logger.info("Migration: Adding 'last_vertex_sync_at' column to document")
+                    conn.execute(text("ALTER TABLE document ADD COLUMN last_vertex_sync_at TIMESTAMP"))
+
+                # Check for 'last_sync_error' column
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='document' AND column_name='last_sync_error'"
+                ))
+                if result.fetchone() is None:
+                    logger.info("Migration: Adding 'last_sync_error' column to document")
+                    conn.execute(text("ALTER TABLE document ADD COLUMN last_sync_error TEXT"))
+
+                # Check for 'group_id' column
+                result = conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='document' AND column_name='group_id'"
+                ))
+                if result.fetchone() is None:
+                    logger.info("Migration: Adding 'group_id' column to document")
+                    conn.execute(text("ALTER TABLE document ADD COLUMN group_id UUID"))
             
             conn.commit()
     except Exception as e:

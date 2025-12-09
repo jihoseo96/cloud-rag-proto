@@ -1,0 +1,23 @@
+{
+  "sections": [
+    {
+      "title": "Project Overview",
+      "content": "The goal is to build a cloud system.",
+      "tables": [],
+      "subsections": []
+    },
+    {
+      "title": "I. Functional Requirements",
+      "content": "",
+      "tables": [],
+      "subsections": [
+        {
+          "title": "1. Auth",
+          "content": "The system must support OAuth2.",
+          "tables": [],
+          "subsections": []
+        }
+      ]
+    }
+  ]
+}

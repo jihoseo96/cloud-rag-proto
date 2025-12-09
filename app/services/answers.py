@@ -15,7 +15,8 @@ def create_answer_card(
     created_by: str,
     source_sha256_list: List[str],
     anchors: Optional[List[Dict[str, Any]]] = None,
-    facts: Optional[Dict[str, Any]] = None
+    facts: Optional[Dict[str, Any]] = None,
+    status: str = "pending"
 ) -> AnswerCard:
     """
     Create a new AnswerCard.
@@ -27,7 +28,7 @@ def create_answer_card(
     initial_variant = {
         "content": answer,
         "context": "default",
-        "status": "PENDING", # Initial creation requires review
+        "status": status.upper(), # Initial creation requires review
         "risk_level": assess_risk(answer, facts or {}).get("risk_level", "SAFE"),
         "usage_count": 0,
         "created_by": created_by
@@ -41,7 +42,7 @@ def create_answer_card(
         answer=answer, # Main display answer (usually the approved one)
         created_by=created_by,
         source_sha256_list=source_sha256_list,
-        status="pending",
+        status=status,
         anchors=anchors or [],
         facts=facts or {},
         variants=[initial_variant]

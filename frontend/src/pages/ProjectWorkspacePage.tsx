@@ -23,7 +23,8 @@ import {
   X,
   Layers,
   UserPlus,
-  Archive
+  Archive,
+  Trash2
 } from 'lucide-react';
 import {
   Dialog,
@@ -65,6 +66,7 @@ function ProjectWorkspacePage() {
   const [showKnowledgeHubDialog, setShowKnowledgeHubDialog] = useState(false);
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
   const [showCloseProjectDialog, setShowCloseProjectDialog] = useState(false);
+  const [showDeleteProjectDialog, setShowDeleteProjectDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [userResponse, setUserResponse] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -237,6 +239,18 @@ function ProjectWorkspacePage() {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!projectId) return;
+    try {
+      await projectApi.deleteProject(projectId);
+      setShowDeleteProjectDialog(false);
+      // Force reload to update sidebar or navigate to home
+      window.location.href = '/';
+    } catch (e) {
+      console.error("Failed to delete project", e);
+    }
+  };
+
   const getStatusBadge = (status: RequirementStatus) => {
     switch (status) {
       case 'approved':
@@ -293,19 +307,30 @@ function ProjectWorkspacePage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="text-[#D0362D] hover:text-[#D0362D] hover:bg-[#D0362D]/10 border-[#D0362D]/20"
+                    onClick={() => setShowDeleteProjectDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    프로젝트 삭제
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowAddMemberDialog(true)}
                   >
                     <UserPlus className="h-4 w-4" />
                     멤버 추가
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowCloseProjectDialog(true)}
-                  >
-                    <Archive className="h-4 w-4" />
-                    프로젝트 완료
-                  </Button>
+                  {project?.status !== 'completed' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowCloseProjectDialog(true)}
+                    >
+                      <Archive className="h-4 w-4" />
+                      프로젝트 완료
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -510,7 +535,7 @@ function ProjectWorkspacePage() {
                         <Button
                           variant={req.status === 'approved' ? 'default' : 'outline'}
                           size="sm"
-                          onClick={(e) => {
+                          onClick={(e: React.MouseEvent) => {
                             e.stopPropagation();
                             handleApproveRequirement(req.id);
                           }}
@@ -804,7 +829,7 @@ function ProjectWorkspacePage() {
                 취소
               </Button>
               <Button onClick={handleAddMember}>
-                초대 보내기
+                초대하기
               </Button>
             </div>
           </DialogContent>
@@ -837,6 +862,47 @@ function ProjectWorkspacePage() {
               </Button>
               <Button onClick={handleCloseProject}>
                 프로젝트 완료
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Project Dialog */}
+        <Dialog open={showDeleteProjectDialog} onOpenChange={setShowDeleteProjectDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-[#D0362D]" />
+                프로젝트 삭제
+              </DialogTitle>
+              <DialogDescription>
+                이 작업은 되돌릴 수 없습니다. 프로젝트와 관련된 모든 데이터가 영구적으로 삭제됩니다.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-4">
+              <div className="bg-[#FCE8E6] border border-[#D0362D]/30 rounded-lg p-3">
+                <div className="text-[0.75rem] text-[#D0362D] mb-2 font-semibold">
+                  삭제할 프로젝트
+                </div>
+                <div className="text-[0.875rem] text-[#1F1F1F] font-medium">
+                  {project?.name}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteProjectDialog(false)}
+              >
+                취소
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteProject}
+              >
+                영구 삭제
               </Button>
             </div>
           </DialogContent>

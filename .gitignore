@@ -18,6 +18,8 @@ venv/
 .env
 .env.*
 .envrc
+secrets/
+secrets
 
 # Data / Artifacts (원하면 유지)
 # data/

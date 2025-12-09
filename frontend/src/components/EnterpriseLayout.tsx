@@ -49,11 +49,9 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [completedExpanded, setCompletedExpanded] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
 
+  // Fetch projects from backend
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -79,46 +77,7 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
     return location.pathname === path;
   };
 
-  // 프로젝트 삭제 핸들러
-  const handleDeleteProject = async () => {
-    if (!selectedProject) return;
 
-    try {
-      await projectApi.deleteProject(selectedProject.id);
-
-      // 로컬 State에서 제거
-      setProjects(projects.filter(p => p.id !== selectedProject.id));
-      setDeleteDialogOpen(false);
-      setSelectedProject(null);
-
-      // 삭제된 프로젝트 페이지에 있었다면 홈으로 이동
-      if (location.pathname.includes(selectedProject.id)) {
-        navigate('/knowledge/answers');
-      }
-    } catch (error) {
-      console.error("Failed to delete project", error);
-    }
-  };
-
-  // 프로젝트 완료 핸들러
-  const handleCompleteProject = async () => {
-    if (!selectedProject) return;
-
-    try {
-      await projectApi.updateProjectStatus(selectedProject.id, 'completed');
-
-      // 상태를 completed로 변경
-      setProjects(projects.map(p =>
-        p.id === selectedProject.id
-          ? { ...p, status: 'completed' as const }
-          : p
-      ));
-      setCompleteDialogOpen(false);
-      setSelectedProject(null);
-    } catch (error) {
-      console.error("Failed to complete project", error);
-    }
-  };
 
   return (
     <div className="flex h-screen bg-background">
@@ -235,8 +194,8 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
                   <Link
                     to={`/project/${project.id}/workspace`}
                     className={`
-                      flex items-center gap-3 py-2 rounded-lg transition-colors text-[0.8125rem]
-                      ${sidebarCollapsed ? 'px-3' : 'px-3 ml-2'}
+                      flex items-center gap-3 py-2 rounded-lg transition-colors text-[0.8125rem] relative
+                      ${sidebarCollapsed ? 'px-3' : 'px-3 ml-2 pr-10'}
                       ${active
                         ? 'bg-[#D3E3FD] text-[#0B57D0] font-medium'
                         : 'text-[#424242] hover:bg-[#E8EAED]'
@@ -256,58 +215,14 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
                       </div>
                     ) : (
                       <>
-                        <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${active ? 'bg-[#0B57D0]' : 'bg-[#9AA0A6]'}`} />
-                        <span className="truncate flex-1">{project.name}</span>
+                        {/* Increased dot size from h-1.5 w-1.5 to h-2 w-2 for better visibility */}
+                        <div className={`h-2 w-2 rounded-full flex-shrink-0 ${active ? 'bg-[#0B57D0]' : 'bg-[#9AA0A6]'}`} />
+                        <span className="truncate flex-1 min-w-0">{project.name}</span>
                       </>
                     )}
                   </Link>
 
-                  {/* Context Menu Button - visible on hover */}
-                  {!sidebarCollapsed && (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 hover:bg-[#E8EAED]"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }}
-                          >
-                            <MoreHorizontal className="h-4 w-4 text-[#424242]" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setSelectedProject(project);
-                              setCompleteDialogOpen(true);
-                            }}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-2 text-[#0E7A4E]" />
-                            프로젝트 완료
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-[#D0362D]"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setSelectedProject(project);
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            프로젝트 삭제
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  )}
+                  {/* Context Menu Button Removed */}
                 </div>
               );
             })}
@@ -406,91 +321,6 @@ export function EnterpriseLayout({ children, projectId }: EnterpriseLayoutProps)
       <main className="flex-1 overflow-hidden">
         {children}
       </main>
-
-      {/* Delete Project Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-[#D0362D]" />
-              프로젝트 삭제
-            </DialogTitle>
-            <DialogDescription>
-              이 작업은 되돌릴 수 없습니다. 프로젝트와 관련된 모든 데이터가 영구적으로 삭제됩니다.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedProject && (
-            <div className="py-4">
-              <div className="bg-[#FCE8E6] border border-[#D0362D]/30 rounded-lg p-3">
-                <div className="text-[0.75rem] text-[#D0362D] mb-2 font-semibold">
-                  삭제할 프로젝트
-                </div>
-                <div className="text-[0.875rem] text-[#1F1F1F] font-medium">
-                  {selectedProject.name}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              취소
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteProject}
-            >
-              영구 삭제
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Complete Project Dialog */}
-      <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-[#0E7A4E]" />
-              프로젝트 완료
-            </DialogTitle>
-            <DialogDescription>
-              프로젝트를 완료 처리하시겠습니까? 완료된 프로젝트는 "완료된 프로젝트" 폴더로 이동됩니다.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedProject && (
-            <div className="py-4">
-              <div className="bg-[#F7F7F8] rounded-lg p-3">
-                <div className="text-[0.75rem] text-[#9AA0A6] mb-2">
-                  프로젝트 정보
-                </div>
-                <div className="text-[0.875rem] text-[#1F1F1F] font-medium">
-                  {selectedProject.name}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setCompleteDialogOpen(false)}
-            >
-              취소
-            </Button>
-            <Button
-              onClick={handleCompleteProject}
-            >
-              완료 처리
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

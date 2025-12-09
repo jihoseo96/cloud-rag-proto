@@ -273,11 +273,16 @@ def get_project_requirements(project_id: str, db: Session = Depends(get_db)):
                 if card.anchors:
                     anchors_data = card.anchors if isinstance(card.anchors, list) else []
                     for a in anchors_data:
-                        doc_title = doc_map.get(a.get("doc_id"), "Unknown Document")
+                        doc_id_str = a.get("doc_id")
+                        doc_title = "Unknown Document"
+                        if doc_id_str:
+                            # Try to find in doc_map
+                            doc_title = doc_map.get(doc_id_str, "Unknown Document")
+                            
                         sources.append({
                             "text_snippet": doc_title, # Use title as snippet for now as per UI requirement "doc"
                             "page": a.get("page", 1),
-                            "doc_id": a.get("doc_id")
+                            "doc_id": doc_id_str
                         })
                 
                 # Populate past proposals

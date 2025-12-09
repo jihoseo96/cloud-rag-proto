@@ -1,14 +1,20 @@
 fastapi
-uvicorn[standard]
+uvicorn
+sqlalchemy
+psycopg[binary]
+pgvector
+pydantic
+pydantic-settings
+python-dotenv
+openai
+tiktoken
+python-multipart
+# Infra & Parsing
+boto3
+pdfplumber
 olefile
 pyhwp
-pdfplumber
-psycopg[binary]
-alembic
-boto3
-openai
-pgvector
-cryptography
-pyopenssl
-python-multipart
-rapidfuzz
+# GCP
+google-cloud-aiplatform
+google-cloud-discoveryengine
+google-auth

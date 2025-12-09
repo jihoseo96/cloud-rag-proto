@@ -23,6 +23,7 @@ class AnswerCard(Base):
     anchors = Column(JSONB, nullable=True)
     variants = Column(JSONB, nullable=True)
     facts = Column(JSONB, nullable=True)
+    origin = Column(String, server_default=text("'PROJECT'"), nullable=False, default="PROJECT") # 'MINED' | 'PROJECT'
     past_proposals = Column(JSONB, nullable=True, server_default=text("'[]'::jsonb"))
     created_at = Column(TIMESTAMP, server_default=text("now()"))
     updated_at = Column(TIMESTAMP, server_default=text("now()"))
@@ -35,6 +36,8 @@ class AnswerChunk(Base):
     page = Column(Integer, nullable=False, default=0)
     text = Column(Text, nullable=False)
     embedding = Column(Vector(1536), nullable=False)
+    
+    answer_card = relationship("AnswerCard", backref="chunks")
 
 class AnswerCardLog(Base):
     __tablename__ = "answer_card_log"

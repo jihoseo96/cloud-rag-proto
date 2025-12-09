@@ -1,0 +1,286 @@
+{
+  "summary": "야놀자 그룹 및 계열사를 대상으로, 글로벌 HR Governance를 지원하는 통합 Global 인사시스템(HRIS)을 구축하고, 기존 ERP(SAP) 및 사내 시스템과의 연동, 데이터 마이그레이션, 정보보안, UX, 유지보수 및 컨설팅을 포함한 전사적 도입 프로젝트를 수행하는 사업자를 선정하는 제안요청서이다.",
+  "deadline": null,
+  "requirements": [
+    {
+      "requirement_text": "Global 인사시스템은 전 세계 법인 및 계열사를 대상으로, 각 지역의 법적 요구사항을 충족하면서도 글로벌 차원에서 일관되게 운영 가능한 통합 HR 플랫폼이어야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "Global 인사시스템은 Core HR, ATS, 성과/보상 관리, 국내 B2B 급여 및 연동, HR 제도 변화 관리 및 설계 컨설팅을 포함한 모듈 구성 및 기능을 제공해야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "Core HR 모듈은 직원 정보 관리, 조직 구조 관리, 근태(휴직/휴가) 관리 등의 필수 기능을 제공해야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "직원 정보 관리 기능은 직원의 인사 정보, 계약 정보 등 전 인사 라이프사이클에 대한 정보를 통합 관리할 수 있어야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "조직 구조 관리 기능은 부서 및 팀의 조직도를 쉽고 효율적으로 관리하고, 보고 체계를 명확하게 정의·관리할 수 있어야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "ATS 모듈은 채용 공고 등록, 지원자 이력서 관리, 면접 일정 관리 등을 포함하여 채용 프로세스를 자동화할 수 있어야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "지원자 관리 기능은 지원 상태 추적, 지원자와의 커뮤니케이션 관리, 최종 후보자 선별 등 전 과정을 시스템 상에서 관리할 수 있어야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "성과/보상 관리 모듈은 목표 설정, 성과 평가, 상시 피드백, 보상 체계 관리를 지원해야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "목표 설정 기능은 직원별 및 팀별 목표 설정과 목표 진척도 관리를 지원해야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "성과 평가 기능은 연간/주기적인 성과 평가 프로세스를 지원하고, 평가 결과 및 기록을 시스템에 저장·관리해야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "상시 피드백 기능은 실시간 피드백 제공과 피드백 이력 기록 및 조회를 지원해야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "보상 체계 관리 기능은 보상 지급 이력을 체계적으로 기록·관리하고 조회할 수 있어야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "국내 B2B 급여 기능은 급여 계산 기능(3rd Party 솔루션 포함 제안 가능)을 제공하고, 급여 지급 결과를 ERP 시스템과 연동할 수 있어야 한다.",
+      "requirement_type": "integration",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "NEXT HRIS 구축 기간 동안, 신규 시스템에 적합한 HR 제도 변화 관리 및 설계에 대한 컨설팅 서비스를 제공해야 한다.",
+      "requirement_type": "consulting",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "기존 인사 데이터는 정확하게 데이터 마이그레이션 되어야 하며, 기존 사내 시스템과의 원활한 통합이 보장되어야 한다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "ERP(SAP) 시스템과 통합하여 회사, 사업영역, Cost Center 등 필수 기업구조 데이터를 본사 ERP 시스템과 연계할 수 있어야 한다.",
+      "requirement_type": "integration",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "조직 및 조직원별로 유효한 Cost Center를 필수로 지정할 수 있는 기능이 필요하다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "조직원 별 겸직 조직에 대해서도 유효한 Cost Center를 필수로 지정할 수 있는 기능이 필요하다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "보상 지급 내역을 사내 ERP 시스템으로 회계전표 전기 형태로 전송하는 기능이 필요하다.",
+      "requirement_type": "integration",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "인사 정보에 대한 사내 시스템과의 실시간 연동 및 확장이 가능한 시스템 구조를 구현해야 한다.",
+      "requirement_type": "integration",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "멤버사별 사내 시스템이 상이한 환경에서도 자유롭게 확장 가능한 연동 아키텍처가 필요하다.",
+      "requirement_type": "architecture",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "본직 및 겸직 정보가 사내 연동 시스템에서 구분된 정보로 수신될 수 있도록 인터페이스를 구성해야 한다.",
+      "requirement_type": "integration",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "인사정보 외에 코스트센터, 계좌정보 등 재무 관련 정보도 함께 연동될 수 있도록 구성해야 한다.",
+      "requirement_type": "integration",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "인사 Core 정보뿐만 아니라 연동 시스템에서 필요로 하는 추가 정보를 위한 커스텀 필드 확장 기능을 구현해야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "향후 운영 환경 전환 시에도 시스템을 쉽게 확장할 수 있는 구조로 설계해야 한다.",
+      "requirement_type": "architecture",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "외주 인력 정보를 통합 관리하여 인사정보의 원천 데이터로 관리할 수 있어야 한다.",
+      "requirement_type": "functional",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "Active Directory, Google Workspace, 그룹웨어, e-Accounting, 구매시스템, 법무시스템, 시프티, 레몬베이스, ERP, 연결회계, 내부회계 시스템 등 기존 사내 시스템과의 연동을 고려한 설계를 해야 한다.",
+      "requirement_type": "integration",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "그룹 내 여러 계열사의 인사 정보를 하나의 시스템에서 운용할 수 있는 멀티-엔티티 아키텍처를 제공해야 한다.",
+      "requirement_type": "architecture",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "그룹 Level의 HR Governance를 운영할 수 있도록 그룹 차원의 정책, 규정, 공통 기준을 반영·관리할 수 있는 아키텍처를 제공해야 한다.",
+      "requirement_type": "architecture",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "Global 확장성과 정보보안, 개인정보 보호를 고려한 시스템 설계를 제공해야 한다.",
+      "requirement_type": "security",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "계정/인증관리 및 접근 제어 체계를 포함하여 권한 기반의 접근 통제를 설계해야 한다.",
+      "requirement_type": "security",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "데이터의 안전한 송·수신을 위한 암호화 및 보안 통신 설계를 적용해야 한다.",
+      "requirement_type": "security",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "국가 간 개인정보 정책을 준수하기 위해, 국가별로 개인정보 데이터의 조회 및 노출을 관리·제어하는 기능이 필요하다.",
+      "requirement_type": "security",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "사용자 경험(UI/UX)은 직관적이고 사용자 친화적이어야 하며, 모바일 접근성을 지원해야 한다.",
+      "requirement_type": "usability",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "Global 인사시스템은 다국어 지원 기능을 제공해야 한다.",
+      "requirement_type": "usability",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "시스템 개발 없이 HR 사용자 또는 시민개발자가 자체적으로 프로세스와 화면을 고도화할 수 있는 기능(예: 설정, 구성, Low-code/No-code)이 제공되어야 한다.",
+      "requirement_type": "usability",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "프로젝트 일정, 주요 마일스톤, 리스크 관리 및 품질 보증 계획을 포함한 체계적인 프로젝트 관리 방안을 제시해야 한다.",
+      "requirement_type": "project_management",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "시스템 구축 후 지속적인 유지보수 계획과 글로벌 지원 체계를 수립·운영해야 한다.",
+      "requirement_type": "support",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "시스템 구축 후 HR 담당자 및 임직원 대상 사용자 교육을 수행하고, 교육 교안을 작성·제공해야 한다.",
+      "requirement_type": "support",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "제안사는 합리적인 예산안을 제시하고, Global 인사시스템 도입에 따른 장기적인 비용 절감 효과를 분석하여 제시해야 한다.",
+      "requirement_type": "commercial",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "Global 인사시스템 구축 계약은 회사 및 회사의 계열사(야놀자, 산하정보기술, 데이블, 야놀자클라우드파트너스, 야놀자에프앤비솔루션, 스마틱스, Go Global Travel Co. Ltd., Yanolja Cloud Solution Co. Ltd., MST Travel Co. Ltd. 등)에 동일하게 효력이 적용되도록 해야 한다.",
+      "requirement_type": "contract",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "마이그레이션 범위는 평가, 보상, 발령 이력, 징계 이력을 포함해야 한다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "마이그레이션 대상 기간은 2022년부터 현재까지의 모든 평가, 보상, 발령 이력, 징계 이력 데이터를 포함해야 한다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "평가 이력은 각 직원의 연간 및 분기별 성과 평가 기록을 모두 마이그레이션해야 한다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "보상 이력은 급여, 사이닝, 리텐션 등 보상 관련 기록을 모두 마이그레이션해야 한다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "발령 이력은 직원의 직무 및 부서 이동 등 인사 발령 관련 기록을 모두 마이그레이션해야 한다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "징계 이력은 징계 관련 기록 및 사유를 포함하여 마이그레이션하되, 상벌 이력의 마이그레이션 여부는 회사와 사전 협의·확인이 필요하다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "평가, 보상, 발령 이력, 징계 이력을 제외한 기타 인사 정보는 최신 데이터를 기준으로 텍스트 파일 형태로 시스템에 업로드해야 한다.",
+      "requirement_type": "data",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "프로젝트 기간은 1년(2025년 03월 ~ 2026년 02월 예정)으로 계획하며, 일정은 상호 협의 하에 조율 가능해야 한다.",
+      "requirement_type": "project_management",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "제안사는 제안서에 포함된 정보를 정확하고 완전하게 작성하고, 객관적으로 입증 가능한 자료를 제공할 수 있어야 한다.",
+      "requirement_type": "other",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "제안서에 사용된 영문 약어는 상세 내용을 각주나 별도 설명으로 첨부해야 한다.",
+      "requirement_type": "other",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "“~를 제공할 수 있다”, “~이 가능하다”, “~를 고려하고 있다”와 같이 모호한 표현은 사용하지 않고, 구체적이고 확정적인 표현으로 제안해야 한다.",
+      "requirement_type": "other",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "제안사는 금액 제안 시 관련 법규 준수에 소요되는 비용(보험료, 안전관리비 등)을 포함하여 모든 원가 항목을 종합적으로 고려하여 산출해야 한다.",
+      "requirement_type": "commercial",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "제출된 제안서는 회사의 요청이 없는 한 수정·삭제·대체할 수 없으며, 계약 후에도 제안서 내용은 계약서와 동일한 효력을 가진다(단, 계약서와 상이할 경우 계약서 내용이 우선).",
+      "requirement_type": "contract",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "제안사는 회사가 요청하는 경우 추가 제안 또는 추가 자료를 제출해야 하며, 추가 제출 자료 또한 제안서와 동일한 효력을 가진다.",
+      "requirement_type": "contract",
+      "compliance_level": "YES"
+    },
+    {
+      "requirement_text": "제안사는 동종 IT 업계 및 Startup 기반 성장 기업 HRIS 도입 및 구축 경험, Global MNC 대상 Global HR 제도 컨설팅 경험, 창의적이고 기업 브랜드를 반영한 디자인 및 아이템 제안 능력, 빠른 납품 및 철저한 사후관리 서비스를 보유·제시하는 경우 평가에서 우대될 수 있다.",
+      "requirement_type": "qualification",
+      "compliance_level": "YES"
+    }
+  ]
+}

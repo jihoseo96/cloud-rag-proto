@@ -16,3 +16,8 @@ class Document(Base):
     # Folder support
     parent_id = Column(UUID(as_uuid=True), ForeignKey("document.id"), nullable=True)
     is_folder = Column(Boolean, default=False, nullable=False)
+
+    # Vertex AI Sync
+    vertex_sync_status = Column(String, server_default=text("'PENDING'"), nullable=False, default="PENDING")
+    last_vertex_sync_at = Column(TIMESTAMP, nullable=True)
+    last_sync_error = Column(String, nullable=True)

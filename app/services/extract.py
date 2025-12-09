@@ -5,6 +5,7 @@ from io import BytesIO
 import os
 import zipfile  # NOTE: DOCX/PPTX(Office Open XML)는 zip 포맷이기 때문에 추가
 from typing import List, Optional
+from app.utils.debug_logger import log_debug
 
 # NOTE: 아래 두 라이브러리는 DOCX/PPTX 지원용
 # - python-docx
@@ -154,16 +155,20 @@ def extract_text_pages(fp) -> List[str]:
     # 1) PDF 헤더 검사
     if data.lstrip().startswith(b"%PDF-"):
         # 기존 로직 그대로 사용
+        log_debug("[Extract] Detected PDF file.")
         return _extract_pdf_pages_from_bytes(data)
 
     # 2) ZIP 기반 Office 포맷(DOCX/PPTX) 검사
     if data.startswith(b"PK\x03\x04"):  # 일반적인 ZIP 시그니처
         office_type = _detect_office_type_from_zip(data)
         if office_type == "docx":
+            log_debug("[Extract] Detected DOCX file.")
             return _extract_docx_pages_from_bytes(data)
         elif office_type == "pptx":
+            log_debug("[Extract] Detected PPTX file.")
             return _extract_pptx_pages_from_bytes(data)
         # ZIP이지만 Office가 아닌 경우 → 아래 plain text 시도로 폴백 (또는 에러 던져도 됨)
 
     # 3) 나머지는 TXT/MD 등 '평문 텍스트'로 취급
+    log_debug("[Extract] Treating as plain text.")
     return _extract_plain_text_pages_from_bytes(data)

@@ -6,6 +6,9 @@ from app.models.chunk import Chunk
 from app.models.document import Document
 from app.models.answer import AnswerChunk, AnswerCard
 
+from app.services.vertex_client import VertexAIClient
+from app.utils.debug_logger import log_error
+
 # Default weights
 W_VEC_DEFAULT = 0.6
 W_LEX_DEFAULT = 0.4
@@ -31,7 +34,35 @@ def search_chunks(
     """
     # 1. Search Document Chunks
     doc_results = []
-    if not prefer_team_answer: # If prefer_team_answer is True, we might still want docs, but let's keep it simple
+    
+    # Strategy:
+    # If group_id is provided -> Knowledge Hub -> Use Vertex AI Search
+    # If group_id is None -> Project/Personal -> Use Local PGVector
+    
+    if group_id:
+        # Vertex AI Search
+        try:
+            v_client = VertexAIClient()
+            # Note: Vertex Search sorts by relevance automatically
+            v_res = v_client.search_docs(qtext, top_k=top_k)
+            for r in v_res:
+                doc_results.append({
+                    "source_type": "document (vertex)",
+                    "document_id": r["id"], # Assuming this maps to our UUID
+                    "answer_id": None,
+                    "page": 0, # Vertex snippet doesn't give page readily
+                    "text": r["snippet"],
+                    "title": r["title"],
+                    "final_score": 0.85 # Placeholder score as Vertex doesn't give normalized cosine
+                })
+        except Exception as e:
+            log_error(f"Vertex Search failed: {e}")
+            # Fallback to local search if Vertex fails? 
+            # For now, let's allow fallback or just leave doc_results empty.
+            pass
+            
+    if not doc_results and not prefer_team_answer: 
+        # Local PGVector Search (Fall back or Project context)
         doc_query = db.query(Chunk, Chunk.embedding.cosine_distance(qvec).label("distance")) \
             .order_by("distance") \
             .limit(top_k)
@@ -48,6 +79,10 @@ def search_chunks(
             
         if group_id:
             doc_query = doc_query.filter(Document.group_id == UUID(group_id))
+        else:
+            # If no group_id, ensure we don't accidentally search KH if intended?
+            # Or just filter by workspace. 
+            pass
             
         for chunk, distance in doc_query.all():
             doc_results.append({

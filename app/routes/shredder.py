@@ -6,6 +6,7 @@ from app.services.s3 import get_pdf_bytes
 from app.services.indexer import extract_text_pages
 from pydantic import BaseModel
 from typing import Optional
+from app.utils.debug_logger import log_info, log_error, log_debug
 
 router = APIRouter(prefix="/shredder", tags=["shredder"])
 
@@ -23,6 +24,16 @@ class TriggerBody(BaseModel):
     project_id: str
     confirm_cost: bool = False
 
+@router.get("/debug-test")
+def debug_test_log():
+    """
+    Simple endpoint to test if logging is working.
+    """
+    log_info("[Debug Test] Info log from /shredder/debug-test")
+    log_debug("[Debug Test] Debug log from /shredder/debug-test")
+    log_error("[Debug Test] Error log from /shredder/debug-test")
+    return {"status": "logged", "message": "Check rfp_debug.log and terminal output"}
+
 @router.post("/trigger")
 def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
     """
@@ -32,6 +43,8 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
     from app.models.project import Project
     from app.models.document import Document
     import os
+
+    log_info(f"[Route] Triggering shredding for project_id={body.project_id}, confirm_cost={body.confirm_cost}")
 
     # 1. Get Project & Group
     try:
@@ -48,7 +61,10 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
     # 2. Get Documents
     docs = db.query(Document).filter(Document.group_id == project.group_id).all()
     if not docs:
+        log_error(f"[Route] No documents found for group_id={project.group_id}")
         raise HTTPException(400, "No documents found for this project")
+    
+    log_info(f"[Route] Found {len(docs)} documents for project. Starting text extraction.")
 
     # 3. Read Content
     full_text = ""
@@ -58,8 +74,19 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
         if doc.s3_key_raw and doc.s3_key_raw.startswith("file://"):
             path = doc.s3_key_raw.replace("file://", "")
             if os.path.exists(path):
-                with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                    full_text += f.read() + "\n\n"
+                # Fix: Read as binary and use extract_text_pages to handle DOCX/PDF/TXT correctly
+                try:
+                    with open(path, "rb") as f:
+                        file_bytes = f.read()
+                    
+                    pages = extract_text_pages(file_bytes)
+                    for page in pages:
+                        full_text += page + "\n\n"
+                    
+                    log_info(f"[Route] Successfully extracted text from local file: {path}")
+                except Exception as e:
+                    log_error(f"[Route] Failed to extract text from local file {path}: {e}")
+                    print(f"Failed to read local file {path}: {e}")
             else:
                 print(f"File not found: {path}")
         elif doc.s3_key_raw:
@@ -75,7 +102,20 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
             pass
     
     if not full_text.strip():
+        log_error("[Route] No text content found in documents after extraction.")
         raise HTTPException(400, "No text content found in documents")
+
+    log_info(f"[Route] Text extraction complete. Total length: {len(full_text)} chars.")
+
+    # ✅ 1) 텍스트 추출 결과 샘플 로그
+    log_debug(f"[Parse] text_head: {full_text[:1000]}")
+    log_debug(f"[Parse] text_middle: {full_text[len(full_text)//2 : len(full_text)//2 + 1000]}")
+    log_debug(f"[Parse] text_tail: {full_text[-1000:]}")
+
+    # ✅ 2) 요구사항 관련 키워드 존재 여부 로그
+    keywords = ["요구 사항", "요구사항", "영역별 핵심과제", "F-01", "H-01", "P-01"]
+    found = {k: (k in full_text) for k in keywords}
+    log_debug(f"[Parse] keyword_presence: {found}")
 
     # 4. Execute Shredding
     # Reuse execute logic or call service directly
@@ -84,6 +124,7 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
         # We return 402 Payment Required to signal frontend to ask for confirmation
         # But for MVP "Start Analysis" button usually implies consent or we show cost first.
         # Let's assume frontend handles this.
+        log_info(f"[Route] Cost check returned: {cost}")
         return {
             "status": "cost_check",
             "estimated_cost": cost
@@ -91,12 +132,21 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
     
     try:
         requirements = shred_rfp(db, body.project_id, full_text)
+        log_info(f"[Route] Shredding successful. Requirements count: {len(requirements)}")
+
+        # Trigger Proposal Mapping (Phase 4 Wiring)
+        from app.services.proposal import map_requirements_to_answers
+        mapping_result = map_requirements_to_answers(db, body.project_id)
+        log_info(f"[Route] Proposal mapping complete: {mapping_result}")
+
         return {
             "status": "success", 
             "count": len(requirements),
-            "requirements_count": len(requirements)
+            "requirements_count": len(requirements),
+            "mapped_count": mapping_result.get("mapped_requirements", 0)
         }
     except Exception as e:
+        log_error(f"[Route] Shredding failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class ShredBody(BaseModel):

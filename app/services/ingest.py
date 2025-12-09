@@ -172,12 +172,25 @@ def ingest_document(
             s3_key_raw=f"file://{os.path.abspath(local_path)}", # Point to local file
             sha256=file_hash,
             is_folder=False, # Explicitly set for files
-            parent_id=None
+            parent_id=None,
+            vertex_sync_status="PENDING" if gid else "PENDING" # Default for all, or differentiate? KH uses Vertex.
         )
+        if gid:
+            new_doc.vertex_sync_status = "PENDING"
+            
         db.add(new_doc)
         db.commit()
         db.refresh(new_doc)
         print(f"[ingest] DB commit successful: {new_doc.id}")
+
+        # Trigger Vertex Indexing for Knowledge Hub (Group) Documents
+        if gid:
+            try:
+                from app.services.indexer import index_file_to_vertex
+                index_file_to_vertex(db, str(new_doc.id))
+            except Exception as e:
+                print(f"[ingest] Failed to trigger Vertex Indexing: {e}")
+
     except Exception as e:
         print(f"[ingest] DB Save Failed: {e}")
         db.rollback()
