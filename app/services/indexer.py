@@ -2,12 +2,13 @@
 import uuid
 from typing import Optional
 from sqlalchemy.orm import Session
-from app.services.s3 import get_pdf_bytes
+from typing import Optional
+from sqlalchemy.orm import Session
+from app.services.ingest import download_bytes_from_gcs, GCS_BUCKET_NAME
 from .extract import extract_text_pages
 from .chunker import chunk_pages
 from .embed import embed_texts
-from .chunker import chunk_pages
-from .embed import embed_texts
+# ...
 from app.models.chunk import Chunk
 from app.models.document import Document
 from app.services.vertex_client import VertexAIClient
@@ -23,20 +24,23 @@ def index_document(
 ) -> int:
     """
     주어진 document에 대해 인덱싱(또는 재인덱싱)을 수행한다.
-
     - pdf_bytes가 주어지면 그 바이트를 사용하고,
-      없으면 s3_key 기준으로 S3에서 파일을 읽어온다.
-    - 항상 기존 Chunk를 싹 지운 뒤 새로 생성하므로,
-      여러 번 호출해도 중복 청크가 생기지 않는다.
-    - 리턴값: 생성된 chunk 개수
+      없으면 s3_key(Blob Name) 기준으로 GCS에서 파일을 읽어온다.
     """
 
-    # 1) 원본 파일 바이트 확보 (업로드에서 넘겨주면 S3 왕복을 줄일 수 있음)
+    # 1) 원본 파일 바이트 확보
     if pdf_bytes is None:
-        pdf_bytes = get_pdf_bytes(s3_key)
+        # Check if it was a local file (Legacy support or Local Dev)
+        if s3_key.startswith("file://"):
+            import os
+            local_path = s3_key.replace("file://", "")
+            with open(local_path, "rb") as f:
+                pdf_bytes = f.read()
+        else:
+            # Assume GCS Blob
+            pdf_bytes = download_bytes_from_gcs(GCS_BUCKET_NAME, s3_key)
 
     if not pdf_bytes or len(pdf_bytes) == 0:
-        # 상황에 따라 log만 찍고 넘길지, 에러를 던질지 정책 결정 가능
         raise ValueError(f"index_document: empty file for doc_id={doc_id}")
 
     # 2) 페이지 단위 텍스트 추출 (PDF / DOCX / PPTX / TXT / MD 자동 판별)

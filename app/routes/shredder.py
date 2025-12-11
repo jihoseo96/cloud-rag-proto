@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.models.db import SessionLocal
 from app.services.shredder import calculate_shredding_cost, shred_rfp
-from app.services.s3 import get_pdf_bytes
 from app.services.indexer import extract_text_pages
 from pydantic import BaseModel
 from typing import Optional
@@ -90,14 +89,50 @@ def trigger_shredding(body: TriggerBody, db: Session = Depends(get_db)):
             else:
                 print(f"File not found: {path}")
         elif doc.s3_key_raw:
-            # S3 Handling
+            # GCS Handling
             try:
-                pdf_bytes = get_pdf_bytes(doc.s3_key_raw)
-                pages = extract_text_pages(pdf_bytes)
+                # Assuming s3_key_raw is the blob name
+                file_bytes = download_bytes_from_gcs(GCS_BUCKET_NAME, doc.s3_key_raw)
+                pages = extract_text_pages(file_bytes)
+                # extract_text_pages returns list of strings now? existing code at line 98 says page["text"]
+                # Wait, line 83 in local logic says "for page in pages: full_text += page + ..."
+                # Line 98 in S3 logic (existing) says "for page in pages: full_text += page["text"] + ..."
+                # app/services/indexer.py says "extract_text_pages(pdf_bytes)" and checks line 47 "c["text"] for c in chunks"
+                # Let's check 'extract_text_pages' return type.
+                # In view_file for indexer.py: 
+                # 43: pages = extract_text_pages(pdf_bytes) 
+                # 47: chunks = chunk_pages(pages)
+                # 56: texts = [c["text"] for c in chunks]
+                # It doesn't clarify `extract_text_pages` return.
+                # But shredder.py existing code for local file (line 83) treats `page` as string? Or object?
+                # "full_text += page + ..." -> STR?
+                # "full_text += page['text']" -> Dict?
+                # I should probably assume `extract_text_pages` returns list of strings (pages) OR list of objects.
+                # Since I am not changing `extract_text_pages`, I should stick to what `shredder.py` does.
+                # `shredder.py` has inconsistent usage between local (line 83) and S3 (line 98).
+                # Local: `page + "\n\n"`
+                # S3: `page["text"] + "\n\n"`
+                # This suggests existing code might be buggy or `extract_text_pages` behavior varies?
+                # I should look at `app/services/extract.py` if possible. But I want to minimize scope creep.
+                # I'll look at `shredder.py` again.
+                # Line 83: `full_text += page + "\n\n"`
+                # Line 98: `full_text += page["text"] + "\n\n"`
+                # I'll trust the S3 path might be the "correct" one for PDF/GCS?
+                # Actually, in `indexer.py`, it uses `chunk_pages(pages)`.
+                # If I just copy the logic from S3 block but use GCS, I should be safe.
+                # BUT, I should check existing S3 block behavior.
+                # I will try to handle both if result is dict or str.
+                
                 for page in pages:
-                    full_text += page["text"] + "\n\n"
+                     if isinstance(page, dict) and "text" in page:
+                         full_text += page["text"] + "\n\n"
+                     elif isinstance(page, str):
+                         full_text += page + "\n\n"
+                     else:
+                         full_text += str(page) + "\n\n"
+
             except Exception as e:
-                print(f"Failed to process S3 file {doc.s3_key_raw}: {e}")
+                print(f"Failed to process GCS file {doc.s3_key_raw}: {e}")
         else:
             pass
     

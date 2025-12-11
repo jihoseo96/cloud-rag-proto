@@ -7,7 +7,8 @@ from app.models.db import SessionLocal
 from app.models.document import Document
 from app.models.chunk import Chunk
 from app.services.indexer import index_document
-from app.services.s3 import put_pdf, presign
+from app.services.ingest import upload_file_to_gcs, GCS_BUCKET_NAME
+# from app.services.s3 import put_pdf, presign # Removed legacy S3
 import os, uuid, hashlib
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -80,10 +81,19 @@ async def upload_document(
         f"filename={file.filename!r}, ct={request.headers.get('content-type')}"
     )
 
-    # S3에 원본 바이트 업로드
-    doc_id, key = put_pdf(content, title)
-    if isinstance(doc_id, str):
-        doc_id = uuid.UUID(doc_id)
+    # GCS에 업로드
+    doc_id = uuid.uuid4()
+    # Key generation logic (Consistent with ingest.py recommendations)
+    # But for raw upload here, we keep simple structure or align with ingest.py?
+    # storage/ingest.py uses: f"{workspace}/{doc_uuid}/{filename}"
+    # Let's use similar: f"{WORKSPACE}/{doc_id}/raw.pdf" (Legacy style) or new style?
+    # To avoid filename issues in URL, UUID folder is good.
+    key = f"{WORKSPACE}/{doc_id}/raw.pdf"
+    
+    try:
+        gcs_uri = upload_file_to_gcs(GCS_BUCKET_NAME, content, key)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GCS Upload failed: {e}")
 
     # group_id 파싱
     gid = None
@@ -107,7 +117,7 @@ async def upload_document(
         Document(
             id=doc_id,
             workspace=WORKSPACE,
-            s3_key_raw=key,
+            s3_key_raw=key, # Store the Key (Blob Name)
             title=title,
             group_id=gid,
             sha256=file_hash,
@@ -117,7 +127,7 @@ async def upload_document(
     )
     db.commit()
 
-    # 원본 바이트 그대로 전달 (S3 왕복 제거)
+    # 원본 바이트 그대로 전달 (S3/GCS 왕복 제거)
     index_document(db, doc_id, key, title, pdf_bytes=content)
 
     return {

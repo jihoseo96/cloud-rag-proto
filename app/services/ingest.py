@@ -1,9 +1,42 @@
 from typing import List, Dict, Any, Optional, Tuple
 import uuid
+import os
+import datetime
 from sqlalchemy.orm import Session
 from app.models.document import Document
 from app.utils.pdf_hwp_parser import parse_pdf, parse_hwp
 from app.utils.semantic_hash import compute_sha256
+from google.cloud import storage
+
+# GCS Configuration
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "cloud-rag-proto-bucket") # Default/Fallback
+storage_client = storage.Client()
+
+def upload_file_to_gcs(bucket_name: str, source_file_content: bytes, destination_blob_name: str):
+    """Uploads a file to the bucket."""
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    blob.upload_from_string(source_file_content, content_type="application/octet-stream")
+    print(f"File uploaded to {destination_blob_name}.")
+    return f"gs://{bucket_name}/{destination_blob_name}"
+
+def generate_signed_url(bucket_name: str, blob_name: str):
+    """Generates a v4 signed URL for downloading a blob."""
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=datetime.timedelta(minutes=15),
+        method="GET",
+    )
+    return url
+
+def download_bytes_from_gcs(bucket_name: str, blob_name: str) -> bytes:
+    """Downloads a blob into memory."""
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    return blob.download_as_bytes()
 
 def detect_conflicts(db: Session, file_hash: str, filename: str, workspace: str, group_id: Optional[uuid.UUID] = None) -> Optional[Dict[str, Any]]:
     """
@@ -146,34 +179,27 @@ def ingest_document(
         print(f"Parsing failed for {filename}: {e}")
         parse_result = {"text": "", "error": f"Parsing failed: {str(e)}"}
 
-    # 4. Save to DB
-    print(f"[ingest] Saving to DB: {filename}, group_id={group_id}")
+    # 4. Save to DB AND GCS
+    print(f"[ingest] Saving to DB & GCS: {filename}, group_id={group_id}")
     try:
         # Convert group_id string to UUID if present
         gid = uuid.UUID(group_id) if group_id else None
 
-        # Save file locally for MVP (Shredder needs it)
-        import os
-        upload_dir = "uploads"
-        if not os.path.exists(upload_dir):
-            os.makedirs(upload_dir)
-        
-        local_path = os.path.join(upload_dir, filename)
-        with open(local_path, "wb") as f:
-            f.write(file_bytes)
-        
-        print(f"[ingest] File saved locally: {local_path}")
+        # Upload to GCS
+        doc_uuid = uuid.uuid4()
+        blob_name = f"{workspace}/{doc_uuid}/{filename}"
+        s3_key = upload_file_to_gcs(GCS_BUCKET_NAME, file_bytes, blob_name) # Returns gs://...
 
         new_doc = Document(
-            id=uuid.uuid4(),
+            id=doc_uuid,
             workspace=workspace,
             group_id=gid,
             title=filename,
-            s3_key_raw=f"file://{os.path.abspath(local_path)}", # Point to local file
+            s3_key_raw=blob_name, # Store the blob name (key) for easier access
             sha256=file_hash,
             is_folder=False, # Explicitly set for files
             parent_id=None,
-            vertex_sync_status="PENDING" if gid else "PENDING" # Default for all, or differentiate? KH uses Vertex.
+            vertex_sync_status="PENDING" if gid else "PENDING" 
         )
         if gid:
             new_doc.vertex_sync_status = "PENDING"
@@ -192,7 +218,7 @@ def ingest_document(
                 print(f"[ingest] Failed to trigger Vertex Indexing: {e}")
 
     except Exception as e:
-        print(f"[ingest] DB Save Failed: {e}")
+        print(f"[ingest] DB/GCS Save Failed: {e}")
         db.rollback()
         raise e
 

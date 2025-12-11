@@ -10,8 +10,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-import boto3
-from botocore.exceptions import ProfileNotFound, NoCredentialsError, ClientError
+# import boto3
+# from botocore.exceptions import ProfileNotFound, NoCredentialsError, ClientError
 from dotenv import load_dotenv
 from sqlalchemy import text
 
@@ -49,36 +49,6 @@ WORKSPACE = os.getenv("WORKSPACE", "personal")
 REGION = os.getenv("REGION", "ap-northeast-2")
 RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "30"))
 
-# ---------------------------------------------------------
-# CORS ORIGINS 설정 (A-5)
-# ---------------------------------------------------------
-def _get_cors_origins() -> List[str]:
-    raw = os.getenv("CORS_ORIGINS")
-    if raw:
-        origins = [o.strip() for o in raw.split(",") if o.strip()]
-        if origins:
-            return origins
-
-    return [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
-
-app = FastAPI(title="RAG Prototype", version="0.2.0")
-
-CORS_ALLOWED_ORIGINS = _get_cors_origins()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # ---------------------------------------------------------
 # Safe Migration Logic
@@ -149,7 +119,6 @@ def run_safe_migration():
             ))
             if result.fetchone() is None:
                 logger.info("Migration: Adding 'project_id' column to answer_card")
-                logger.info("Migration: Adding 'project_id' column to answer_card")
                 conn.execute(text("ALTER TABLE answer_card ADD COLUMN project_id UUID"))
 
             # Check Document Table
@@ -195,11 +164,51 @@ def run_safe_migration():
     except Exception as e:
         logger.error(f"Migration failed: {e}")
 
-# Run safe migration
-run_safe_migration()
+# ---------------------------------------------------------
+# Lifespan (Startup/Shutdown) Logic
+# ---------------------------------------------------------
+from contextlib import asynccontextmanager
 
-# Create tables if they don't exist
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Run migrations
+    logger.info("Lifespan: Starting up...")
+    try:
+        run_safe_migration()
+        Base.metadata.create_all(bind=engine)
+        logger.info("Lifespan: Database migration completed.")
+    except Exception as e:
+        logger.error(f"Lifespan: Migration failed - {e}")
+        # We might want to let it fail or continue depending on severity
+        # raising here will prevent the app from starting if migration fails
+        raise e
+    
+    yield
+    
+    # Shutdown logic (if any)
+    logger.info("Lifespan: Shutting down...")
+
+# ---------------------------------------------------------
+# CORS ORIGINS 설정 (A-5)
+# ---------------------------------------------------------
+def _get_cors_origins() -> List[str]:
+    raw = os.getenv("CORS_ORIGINS")
+    if raw:
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+        if origins:
+            return origins
+
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
+app = FastAPI(title="RAG Prototype", version="0.2.0", lifespan=lifespan)
+
 
 
 # ---------------------------------------------------------
@@ -328,19 +337,19 @@ def health_check():
 # ---------------------------------------------------------
 # S3 PING 테스트
 # ---------------------------------------------------------
-@app.get("/s3/ping")
-def s3_ping():
-    bucket = "cloud-rag-proto-jihoprototest-apne2"
+# ---------------------------------------------------------
+# GCS PING 테스트
+# ---------------------------------------------------------
+@app.get("/gcs/ping")
+def gcs_ping():
+    from app.services.ingest import storage_client, GCS_BUCKET_NAME
+    
+    bucket_name = GCS_BUCKET_NAME
     prefix = "personal/test/"
     try:
-        session = boto3.Session(profile_name="personal")
-        s3 = session.client("s3", region_name=REGION)
-        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=10)
-        keys = [item["Key"] for item in resp.get("Contents", [])]
-        return {"bucket": bucket, "prefix": prefix, "objects": keys}
-    except ProfileNotFound as e:
-        raise HTTPException(status_code=500, detail=f"AWS profile not found: {e}")
-    except NoCredentialsError as e:
-        raise HTTPException(status_code=500, detail=f"AWS credentials error: {e}")
-    except ClientError as e:
-        raise HTTPException(status_code=500, detail=f"S3 client error: {e}")
+        bucket = storage_client.bucket(bucket_name)
+        blobs = bucket.list_blobs(prefix=prefix, max_results=10)
+        keys = [blob.name for blob in blobs]
+        return {"bucket": bucket_name, "prefix": prefix, "objects": keys}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GCS client error: {e}")

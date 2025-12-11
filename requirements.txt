@@ -10,11 +10,15 @@ openai
 tiktoken
 python-multipart
 # Infra & Parsing
-boto3
 pdfplumber
+pypdf
+rapidfuzz
 olefile
 pyhwp
 # GCP
+google-cloud-storage
 google-cloud-aiplatform
 google-cloud-discoveryengine
+cloud-sql-python-connector[pg8000]
+pg8000
 google-auth

@@ -1,28 +1,8 @@
 # app/models/db.py
 import os
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker, declarative_base
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-# ---------------------------------------------------------
-# SQLAlchemy Engine (Postgres + pgvector)
-# ---------------------------------------------------------
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-)
-
-# 세션 팩토리
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False,
-)
-
-# Base 모델
-Base = declarative_base()
-
+from sqlalchemy import event
+# Import from the single source of truth
+from app.db import engine, SessionLocal, Base
 
 # ---------------------------------------------------------
 # A-3 성능 튜닝: ivfflat.probes 기본값 설정

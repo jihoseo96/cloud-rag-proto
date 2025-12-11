@@ -2,8 +2,8 @@ import logging
 import os
 from datetime import datetime
 
-# Define log file path - Force absolute path to project root
-LOG_FILE_PATH = "/Users/jihoseo/cloud-rag-proto/rfp_debug.log"
+# Define log file path - Use /tmp for Cloud Run compatibility
+LOG_FILE_PATH = os.getenv("LOG_FILE_PATH", "/tmp/rfp_debug.log")
 
 print(f"[DebugLogger] Initializing logger. Log file: {LOG_FILE_PATH}")
 

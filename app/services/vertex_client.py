@@ -8,7 +8,7 @@ from app.utils.debug_logger import log_debug, log_error, log_info
 
 class VertexAIClient:
     def __init__(self):
-        self.project_id = os.getenv("GCP_PROJECT_ID")
+        self.project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("PROJECT_ID")
         self.location = os.getenv("GCP_LOCATION", "global")
         self.data_store_id = os.getenv("VERTEX_DATA_STORE_ID")
         self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
