@@ -1,15 +1,15 @@
 # app/services/search.py
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Union
 from sqlalchemy.orm import Session
 from uuid import UUID
+
 from app.models.chunk import Chunk
 from app.models.document import Document
 from app.models.answer import AnswerChunk, AnswerCard
-
 from app.services.vertex_client import VertexAIClient
-from app.utils.debug_logger import log_error
+from app.utils.debug_logger import log_error, log_info, log_debug
 
-# Default weights
+# Default weights (legacy parameters, kept for compatibility)
 W_VEC_DEFAULT = 0.6
 W_LEX_DEFAULT = 0.4
 DIVERSITY_PENALTY_DEFAULT = 0.9
@@ -19,121 +19,126 @@ def search_chunks(
     qvec: List[float],
     qtext: str,
     top_k: int = 6,
-    w_vec: float = W_VEC_DEFAULT,
-    w_lex: float = W_LEX_DEFAULT,
-    diversity_penalty: float = DIVERSITY_PENALTY_DEFAULT,
-    per_doc_limit: int = 3,
+    w_vec: float = W_VEC_DEFAULT, # unused in this version
+    w_lex: float = W_LEX_DEFAULT, # unused in this version
+    diversity_penalty: float = DIVERSITY_PENALTY_DEFAULT, # unused
+    per_doc_limit: int = 3, # unused
     document_id: Optional[str] = None,
     workspace: str = "personal",
-    group_id: Optional[str] = None,
+    group_id: Optional[str] = None, # If None -> Knowledge Hub (Vertex), If Set -> Project (DB)
     prefer_team_answer: bool = False,
 ) -> List[Dict[str, Any]]:
     """
-    Placeholder implementation of search_chunks.
-    Returns an empty list for now to allow application startup.
+    Hybrid Search Engine:
+    - If group_id is provided (Project Context) -> Use Local PGVector (Chunks & AnswerCards)
+    - If group_id is None (Knowledge Hub Context) -> Use Vertex AI Search (Global Docs)
     """
-    # 1. Search Document Chunks
-    doc_results = []
-    
-    # Strategy:
-    # If group_id is provided -> Knowledge Hub -> Use Vertex AI Search
-    # If group_id is None -> Project/Personal -> Use Local PGVector
-    
-    if group_id:
-        # Vertex AI Search
+    results = []
+
+    # ---------------------------------------------------------
+    # Case A: Knowledge Hub Search (Vertex AI Search)
+    # ---------------------------------------------------------
+    if not group_id:
+        log_info(f"[Search] Context: Knowledge Hub (Global). Using Vertex AI Search for query: '{qtext}'")
         try:
             v_client = VertexAIClient()
-            # Note: Vertex Search sorts by relevance automatically
-            v_res = v_client.search_docs(qtext, top_k=top_k)
-            for r in v_res:
-                doc_results.append({
-                    "source_type": "document (vertex)",
-                    "document_id": r["id"], # Assuming this maps to our UUID
+            # Vertex Search handles semantic + keyword internally
+            vertex_results = v_client.search_docs(qtext, top_k=top_k)
+            
+            for rank, r in enumerate(vertex_results):
+                # Normalize Vertex Result to Unified Format
+                results.append({
+                    "source_type": "vertex_doc", # Indicates this came from Vertex KH
+                    "document_id": r["id"],      # Vertex Doc ID (usually UUID string)
                     "answer_id": None,
-                    "page": 0, # Vertex snippet doesn't give page readily
-                    "text": r["snippet"],
+                    "page": 0,                   # Deep link page info might be in metadata
+                    "text": r["snippet"],        # Snippet from Vertex
                     "title": r["title"],
-                    "final_score": 0.85 # Placeholder score as Vertex doesn't give normalized cosine
+                    "uri": r.get("uri"),         # GCS Link
+                    "final_score": 0.9 - (rank * 0.05), # Artificial decay as Vertex score is hidden
+                    "metadata": {}
+                })
+            
+            return results
+
+        except Exception as e:
+            log_error(f"[Search] Vertex AI Search failed: {e}")
+            # In KH mode, if Vertex fails, we might return empty or fallback to local DB (if desired).
+            # For now, return empty to indicate failure cleanly.
+            return []
+
+    # ---------------------------------------------------------
+    # Case B: Project Context Search (Local PGVector)
+    # ---------------------------------------------------------
+    else:
+        log_info(f"[Search] Context: Project {group_id}. Using Local PGVector.")
+        
+        # 1. Search Document Chunks (RFP Attachments, etc.)
+        doc_results = []
+        try:
+            # Join with Document to filter by group_id
+            doc_query = db.query(
+                Chunk, 
+                Chunk.embedding.cosine_distance(qvec).label("distance")
+            ).join(Document, Chunk.document_id == Document.id).filter(
+                Document.workspace == workspace,
+                Document.group_id == UUID(group_id)
+            ).order_by("distance").limit(top_k)
+
+            for chunk, distance in doc_query.all():
+                similarity = 1 - distance
+                if similarity < 0.3: continue # Basic threshold
+
+                doc_results.append({
+                    "source_type": "document",
+                    "document_id": str(chunk.document_id),
+                    "answer_id": None,
+                    "page": chunk.page,
+                    "text": chunk.text,
+                    "title": chunk.document.title,
+                    "uri": None, # Local logic might need Signed URL generation if requested
+                    "final_score": similarity,
+                    "metadata": {}
                 })
         except Exception as e:
-            log_error(f"Vertex Search failed: {e}")
-            # Fallback to local search if Vertex fails? 
-            # For now, let's allow fallback or just leave doc_results empty.
-            pass
-            
-    if not doc_results and not prefer_team_answer: 
-        # Local PGVector Search (Fall back or Project context)
-        doc_query = db.query(Chunk, Chunk.embedding.cosine_distance(qvec).label("distance")) \
-            .order_by("distance") \
-            .limit(top_k)
-        
-        # Filter by document_id if provided
-        if document_id:
-             doc_query = doc_query.filter(Chunk.document_id == document_id)
-             
-        # Filter by workspace (Chunk -> Document -> workspace)
-        # Assuming Chunk has document_id, we need to join Document to filter by workspace/group
-        from app.models.document import Document
-        doc_query = doc_query.join(Document, Chunk.document_id == Document.id) \
-            .filter(Document.workspace == workspace)
-            
-        if group_id:
-            doc_query = doc_query.filter(Document.group_id == UUID(group_id))
-        else:
-            # If no group_id, ensure we don't accidentally search KH if intended?
-            # Or just filter by workspace. 
-            pass
-            
-        for chunk, distance in doc_query.all():
-            doc_results.append({
-                "source_type": "document",
-                "document_id": chunk.document_id,
-                "answer_id": None,
-                "page": chunk.page,
-                "text": chunk.text,
-                "title": chunk.document.title, # Assuming relationship exists or we joined
-                "final_score": 1 - distance
-            })
+            log_error(f"[Search] Local Doc Search failed: {e}")
 
-    # 2. Search Answer Chunks
-    from app.models.answer import AnswerChunk, AnswerCard
-    ans_query = db.query(AnswerChunk, AnswerChunk.embedding.cosine_distance(qvec).label("distance")) \
-        .join(AnswerCard, AnswerChunk.answer_id == AnswerCard.id) \
-        .filter(AnswerCard.workspace == workspace) \
-        .order_by("distance") \
-        .limit(top_k)
-        
-    if group_id:
-        ans_query = ans_query.filter(AnswerCard.group_id == UUID(group_id))
-        
-    ans_results = []
-    for chunk, distance in ans_query.all():
-        # Boost score if prefer_team_answer
-        score = 1 - distance
-        # Removed artificial boost to ensure accurate confidence scores
-        # if prefer_team_answer:
-        #     score += 0.1
-            
-        ans_results.append({
-            "source_type": "answer",
-            "document_id": None,
-            "answer_id": chunk.answer_id,
-            "page": 0,
-            "text": chunk.text,
-            "title": chunk.answer_card.question, # Assuming relationship
-            "final_score": score
-        })
+        # 2. Search AnswerCard Chunks (Project's Approved Answers)
+        ans_results = []
+        try:
+            from app.models.answer import AnswerChunk, AnswerCard
+            ans_query = db.query(
+                AnswerChunk, 
+                AnswerChunk.embedding.cosine_distance(qvec).label("distance")
+            ).join(AnswerCard, AnswerChunk.answer_id == AnswerCard.id).filter(
+                AnswerCard.workspace == workspace,
+                AnswerCard.group_id == UUID(group_id) # Scope to project
+            ).order_by("distance").limit(top_k)
 
-    # 3. Combine and Sort
-    all_results = doc_results + ans_results
-    all_results.sort(key=lambda x: x["final_score"], reverse=True)
-    
-    return all_results[:top_k]
+            for chunk, distance in ans_query.all():
+                similarity = 1 - distance
+                if similarity < 0.3: continue
+
+                ans_results.append({
+                    "source_type": "answer_card",
+                    "document_id": None,
+                    "answer_id": str(chunk.answer_id),
+                    "page": 0,
+                    "text": chunk.text,
+                    "title": chunk.answer_card.question,
+                    "uri": None,
+                    "final_score": similarity, # Answers usually highly relevant
+                    "metadata": {"status": chunk.answer_card.status}
+                })
+        except Exception as e:
+            log_error(f"[Search] Local Answer Search failed: {e}")
+
+        # 3. Merge & Sort
+        all_results = doc_results + ans_results
+        all_results.sort(key=lambda x: x["final_score"], reverse=True)
+
+        return all_results[:top_k]
 
 class SearchService:
-    def __init__(self):
-        pass
-
-    async def search(self, query: str, project_id: str):
-        # TODO: Implement search logic
-        pass
+    """Class wrapper for future expansion"""
+    pass
