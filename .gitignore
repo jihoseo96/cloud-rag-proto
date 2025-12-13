@@ -27,3 +27,4 @@ secrets
 
 dist/
 build/
+gcp-key.json
