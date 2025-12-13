@@ -24,3 +24,6 @@ secrets
 # Data / Artifacts (원하면 유지)
 # data/
 # *.pdf  # 샘플 PDF를 저장소에 넣지 않으려면 주석 해제
+
+dist/
+build/

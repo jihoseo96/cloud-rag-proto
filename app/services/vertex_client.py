@@ -1,6 +1,6 @@
 import os
 from typing import List, Dict, Any, Optional
-from google.cloud import discoveryengine_v1beta as discoveryengine
+from google.cloud import discoveryengine_v1 as discoveryengine
 from google.api_core.client_options import ClientOptions
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part, GenerationConfig
@@ -10,7 +10,8 @@ class VertexAIClient:
     def __init__(self):
         self.project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("PROJECT_ID")
         self.location = os.getenv("GCP_LOCATION", "global")
-        self.data_store_id = os.getenv("VERTEX_DATA_STORE_ID")
+        # Default Data Store ID Updated
+        self.data_store_id = os.getenv("VERTEX_DATA_STORE_ID", "rfp-dev-connector_1765524681257")
         self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         self.gemini_model_name = os.getenv("VERTEX_AI_MODEL_VERSION", "gemini-3-pro-preview")
 
@@ -55,17 +56,10 @@ class VertexAIClient:
                 serving_config=serving_config,
                 query=query,
                 page_size=top_k,
-                content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
-                    snippet_spec=discoveryengine.SearchRequest.ContentSearchSpec.SnippetSpec(
-                        return_snippet=True
-                    ),
-                    summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
-                        summary_result_count=3,
-                        include_citations=True,
-                        ignore_adversarial_query=True,
-                        ignore_non_summary_seeking_query=True,
-                    ),
-                ),
+                content_search_spec={
+                    "snippet_spec": {"return_snippet": True},
+                    "summary_spec": {"summary_result_count": 3, "include_citations": True},
+                },
             )
             
             response = client.search(request)

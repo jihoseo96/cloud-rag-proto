@@ -1,0 +1,51 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**'              # 루트의 모든 변경사항 감지
+      - '!frontEnd/**'    # 👈 단, frontEnd 폴더 변경은 무시!
+      - '!.github/**'     # (선택) 워크플로우 파일 변경도 무시
+      - '!README.md'      # (선택) 문서 변경 무시
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_RFPOS_DEV_PROJECT_ID }}
+  REGION: asia-northeast3
+  SERVICE_NAME: rfp-backend
+  REPO_NAME: rfp-backend-repo
+  IMAGE_NAME: rfp-backend
+  RUNTIME_SA: rfp-backend-svc
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # defaults: run: working-directory 삭제 (루트가 기본값입니다)
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Google Auth
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ secrets.GITDEPLOY_GCP_SA_KEY }}'
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Configure Docker
+      run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+    - name: Build and Push Container
+      # 루트(.)에 있는 Dockerfile을 사용
+      run: |
+        docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy ${{ env.SERVICE_NAME }} \
+          --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          --region ${{ env.REGION }} \
+          --service-account ${{ env.RUNTIME_SA }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com

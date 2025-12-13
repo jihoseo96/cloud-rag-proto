@@ -140,13 +140,13 @@ function ProjectWorkspacePage() {
     if (unapprovedReqs.length > 0) {
       setShowUnapprovedWarning(true);
     } else {
-      window.open(`http://localhost:8000/projects/${projectId}/export?format=${format}`, '_blank');
+      window.open(`/api/projects/${projectId}/export?format=${format}`, '_blank');
       setShowExportDialog(false);
     }
   };
 
   const handleExportAnyway = (format: 'word' | 'excel') => {
-    window.open(`http://localhost:8000/projects/${projectId}/export?format=${format}`, '_blank');
+    window.open(`/api/projects/${projectId}/export?format=${format}`, '_blank');
     setShowUnapprovedWarning(false);
     setShowExportDialog(false);
   };
